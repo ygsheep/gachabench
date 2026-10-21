@@ -1,0 +1,105 @@
+<!doctype html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>工作区弹窗 · 浏览按钮 · 视觉复核</title>
+<!-- 字体跟线上同源；CSS 用真实构建产物，保证配色/字阶/圆角一致 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../web/dist/assets/index-U7h9oUiL.css">
+<style>
+  html, body { margin: 0; background: var(--gb-void); }
+  .stage { max-width: 720px; margin: 0 auto; padding: 26px 24px 40px; }
+  .cap { margin: 28px 0 10px; font-size: 11.5px; color: var(--gb-ash-dim); }
+  .cap:first-child { margin-top: 0; }
+  .shot { padding: 20px; border-radius: 10px; border: 1px solid var(--gb-rule);
+          background: var(--gb-panel); }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <p class="cap">① 新建项目 —— 父目录带「浏览」（输入框与按钮合成一个控件，分隔线在中间）</p>
+  <div class="shot">
+    <div class="flex flex-col gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-medium">父目录</span>
+        <div class="flex h-9 items-stretch overflow-hidden rounded-ctl border border-rule bg-cell transition-colors">
+          <input value="D:\Notely\workspace\AIGC" spellcheck="false"
+                 class="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12.5px] outline-none">
+          <button type="button" title="打开系统的文件夹选择框"
+                  class="flex flex-none items-center gap-1.5 border-l border-rule-soft px-2.5 text-[11.5px] text-ash transition-colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+            浏览
+          </button>
+        </div>
+        <span class="text-[11.5px] text-ash-dim">项目目录会建在这里面；点右边「浏览」用系统选择框</span>
+      </label>
+
+      <label class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-medium">项目名称</span>
+        <div class="flex h-9 items-stretch overflow-hidden rounded-ctl border border-rule bg-cell transition-colors">
+          <input value="复试3" spellcheck="false"
+                 class="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12.5px] outline-none">
+        </div>
+        <span class="text-[11.5px] text-ash-dim">建议用剧本或批次名</span>
+      </label>
+    </div>
+  </div>
+
+  <p class="cap">② 等待用户在系统框里操作 —— 按钮转「选择中…」并压下（防连点弹两个模态窗）</p>
+  <div class="shot">
+    <div class="flex flex-col gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-medium">父目录</span>
+        <div class="flex h-9 items-stretch overflow-hidden rounded-ctl border border-rule bg-cell transition-colors">
+          <input value="D:\Notely\workspace\AIGC" spellcheck="false"
+                 class="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12.5px] outline-none">
+          <button type="button" disabled
+                  class="flex flex-none items-center gap-1.5 border-l border-rule-soft px-2.5 text-[11.5px] text-ash opacity-45">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+            选择中…
+          </button>
+        </div>
+        <span class="text-[11.5px] text-ash-dim">项目目录会建在这里面；点右边「浏览」用系统选择框</span>
+      </label>
+    </div>
+  </div>
+
+  <p class="cap">③ 打开项目 —— 项目目录同样带「浏览」；选中后自动跑一次检测</p>
+  <div class="shot">
+    <div class="flex flex-col gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-medium">项目目录</span>
+        <div class="flex h-9 items-stretch overflow-hidden rounded-ctl border border-rule bg-cell transition-colors">
+          <input value="D:\Notely\workspace\AIGC\复试2" spellcheck="false"
+                 class="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12.5px] outline-none">
+          <button type="button" title="打开系统的文件夹选择框"
+                  class="flex flex-none items-center gap-1.5 border-l border-rule-soft px-2.5 text-[11.5px] text-ash transition-colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="size-3.5"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+            浏览
+          </button>
+        </div>
+        <span class="text-[11.5px] text-ash-dim">已有目录的绝对路径；会自动匹配里面的资产目录</span>
+      </label>
+    </div>
+  </div>
+
+  <p class="cap">④ 本机没有可用实现时（换台机器）—— 按钮整个不出现，不留死按钮</p>
+  <div class="shot">
+    <label class="flex flex-col gap-1.5">
+      <span class="text-[12.5px] font-medium">父目录</span>
+      <div class="flex h-9 items-stretch overflow-hidden rounded-ctl border border-rule bg-cell transition-colors">
+        <input value="D:\Notely\workspace\AIGC" spellcheck="false"
+               class="min-w-0 flex-1 bg-transparent px-2.5 font-mono text-[12.5px] outline-none">
+      </div>
+      <span class="text-[11.5px] text-ash-dim">项目目录会建在这里面</span>
+    </label>
+  </div>
+
+</div>
+
+</body>
+</html>

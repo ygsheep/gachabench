@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GachaBench · 整合方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   GachaBench · 整合方案视图原型
+   与 prototype/index.html 同源同语言：零彩度金属灰，
+   状态只靠形状 + 明度 ——
+   P0 实心白章（现在就做）／ P1 实线（下一迭代）／
+   P2 点线（排着）／ P3 虚线（以后）／ 暂缓 暗虚（默认关闭）／
+   不做 斜纹 + 66% 明度。
+   轮廓语言：实线 = 已确认，虚线 = 未定 / 未完成。
+   ============================================================ */
+:root{
+  --void:#171717;
+  --panel:#1E1E1E;
+  --cell:#262626;
+  --cell-hi:#303030;
+  --line:#3C3C3C;
+  --line-soft:#2B2B2B;
+  --ash:#A8A8A8;
+  --ash-dim:#909090;
+  --paper:#EEEEEE;
+  --accent:#EEEEEE;
+  --accent-strong:#FFFFFF;
+  --accent-wash:rgba(238,238,238,.10);
+  --accent-line:rgba(238,238,238,.40);
+  --reject:#AAAAAA;
+  --reject-wash:rgba(238,238,238,.06);
+  --hatch:repeating-linear-gradient(135deg,#E9E9E9 0 4px,#5E5E5E 4px 8px);
+  --dotted:repeating-linear-gradient(180deg,#8D8D8D 0 2px,transparent 2px 5px);
+  --dashbar:repeating-linear-gradient(180deg,#EEEEEE 0 4px,transparent 4px 8px);
+  --r-cell:4px;
+  --r-ctl:6px;
+  --r-panel:10px;
+  --ease:cubic-bezier(.2,.8,.25,1);
+  --t-press:90ms;
+  --t-state:280ms;
+  --f-ui:"IBM Plex Sans","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--void);color:var(--paper);font-family:var(--f-ui);
+  font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  font-variant-numeric:tabular-nums;overflow-x:hidden;
+}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer;text-align:left}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent-strong);outline-offset:2px;border-radius:3px}
+::selection{background:rgba(238,238,238,.26);color:var(--paper)}
+[hidden]{display:none!important}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.hint{font-size:11.5px;color:var(--ash-dim);line-height:1.55}
+
+/* ---------------- shell ---------------- */
+.app{display:flex;min-height:100svh}
+.rail{
+  width:84px;flex:0 0 84px;background:var(--panel);border-right:1px solid var(--line-soft);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100svh;
+}
+.rail-mark{padding:17px 0 15px;text-align:center;border-bottom:1px solid var(--line-soft)}
+.rail-mark b{font-size:12.5px;font-weight:600;letter-spacing:.01em}
+.rail-nav{position:relative;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.rail-ind{
+  position:absolute;left:8px;top:0;width:68px;height:52px;border-radius:var(--r-ctl);
+  background:var(--cell-hi);border:1px solid var(--line);
+  transition:transform var(--t-state) var(--ease),width var(--t-state) var(--ease);
+  pointer-events:none;
+}
+.rail-ind::before{content:"";position:absolute;left:-1px;top:13px;bottom:13px;width:2px;border-radius:2px;background:var(--accent-strong)}
+.navbtn{
+  position:relative;z-index:1;height:52px;border-radius:var(--r-ctl);text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  font-size:10.5px;color:var(--ash);transition:color var(--t-press) linear;
+}
+.navbtn svg{width:17px;height:17px;transition:transform var(--t-press) var(--ease)}
+.navbtn:hover{color:var(--paper)}
+.navbtn:active svg{transform:scale(.88)}
+.navbtn[aria-current="true"]{color:var(--paper);font-weight:500}
+.navbtn[aria-current="true"] svg{color:var(--accent-strong)}
+.rail-foot{margin-top:auto;padding:12px 8px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:6px}
+.health{display:flex;align-items:center;gap:5px;font-size:9.5px;color:var(--ash);white-space:nowrap;padding-left:1px}
+.dot{width:5px;height:5px;border-radius:50%;background:#717171;flex:0 0 auto}
+.dot.on{background:var(--accent-strong);box-shadow:0 0 0 3px var(--accent-wash)}
+
+.stage{flex:1;min-width:0;display:flex;flex-direction:column;overflow-x:hidden}
+.view{display:none;flex:1;min-width:0;flex-direction:column}
+.view.on{display:flex}
+.vhead{display:flex;align-items:flex-end;gap:14px;padding:20px 26px 14px;flex-wrap:wrap}
+.vhead h1{font-size:19px;font-weight:600;line-height:1.2}
+.vhead .sub{color:var(--ash);font-size:12.5px;padding-bottom:2px;max-width:82ch;line-height:1.6}
+.vhead .grow{flex:1 1 auto}
+
+/* ---------------- controls ---------------- */
+.btn{
+  height:30px;padding:0 12px;border-radius:var(--r-ctl);border:1px solid var(--line);
+  background:var(--cell);color:var(--paper);font-size:12.5px;font-weight:500;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;
+  transition:transform var(--t-press) var(--ease),background var(--t-press) linear,border-color var(--t-press) linear;
+}
+.btn svg{width:14px;height:14px;flex:0 0 auto}
+.btn:hover{background:var(--cell-hi);border-color:#595959}
+.btn:active{transform:translateY(1px) scale(.985)}
+.btn[disabled]{opacity:.42;cursor:default}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ash)}
+.btn.ghost:hover{background:var(--cell);color:var(--paper)}
+.btn.sm{height:26px;padding:0 10px;font-size:11.5px}
+
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-ctl);padding:2px;gap:2px;position:relative}
+.seg-thumb{position:absolute;top:2px;left:2px;bottom:2px;border-radius:4px;background:var(--cell-hi);border:1px solid #595959;transition:transform var(--t-state) var(--ease),width var(--t-state) var(--ease);pointer-events:none}
+.seg button{position:relative;z-index:1;height:26px;padding:0 11px;border-radius:4px;font-size:12.5px;color:var(--ash);display:inline-flex;align-items:center;gap:6px;transition:color var(--t-press) linear;white-space:nowrap}
+.seg button:hover{color:var(--paper)}
+.seg button[aria-pressed="true"]{color:var(--paper);font-weight:500}
+
+.chip{font-size:11px;padding:2px 7px;border-radius:3px;border:1px solid var(--line);color:var(--ash);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.chip.mono{font-family:var(--f-mono);font-size:10.5px}
+.chip.ok{border-color:var(--accent-line);color:var(--paper);background:var(--accent-wash)}
+.chip.warn{border-style:dashed;color:var(--ash-dim)}
+.chip[aria-pressed="true"]{border-color:var(--accent-line);color:var(--paper);background:var(--accent-wash)}
+
+.card{border:1px solid var(--line-soft);border-radius:var(--r-panel);background:var(--panel);padding:16px;min-width:0}
+.card > h2{font-size:13.5px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+.card > h2 .chip{margin-left:auto}
+.card > .desc{font-size:12px;color:var(--ash);line-height:1.75;margin-bottom:14px;max-width:78ch}
+
+/* ---------------- toast ---------------- */
+.toasts{position:fixed;right:18px;bottom:18px;z-index:90;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.toast{position:relative;background:var(--cell);border:1px solid var(--line);border-radius:var(--r-ctl);padding:9px 13px;font-size:12.5px;min-width:212px;max-width:344px;animation:toastIn .26s var(--ease) both;box-shadow:0 12px 28px rgba(0,0,0,.5)}
+.toast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#5F5F5F}
+.toast b{font-weight:500}
+.toast small{display:block;color:var(--ash);font-size:11.5px;margin-top:2px;line-height:1.5}
+.toast[data-k="final"]::before{background:var(--accent-strong)}
+.toast[data-k="ok"]::before{background:#909090}
+.toast[data-k="err"]::before{background:var(--dashbar)}
+.toast.out{animation:toastOut .2s var(--ease) both}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateX(14px)}}
+
+/* ============================================================
+   整合方案视图
+   ============================================================ */
+.plan{padding:0 26px 44px;display:flex;flex-direction:column;gap:16px;max-width:1320px;min-width:0}
+.sec-h{display:flex;align-items:baseline;gap:10px;padding:0 2px 8px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.sec-h h2{font-size:13.5px;font-weight:600}
+.sec-h .grow{flex:1 1 auto}
+.filterbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 0 12px}
+.filterbar .grow{flex:1 1 auto}
+
+/* ---- 结论先行 ---- */
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.tcard{border:1px solid var(--line-soft);border-radius:var(--r-panel);background:var(--panel);padding:15px 16px;min-width:0}
+.tcard.warn{border-style:dashed}
+.tcard .no{font-family:var(--f-mono);font-size:11px;color:var(--ash-dim)}
+.tcard h3{font-size:13px;font-weight:600;margin:5px 0 6px;display:flex;align-items:center;gap:8px}
+.tcard p{font-size:12px;color:var(--ash);line-height:1.78}
+.tcard p b{color:#C8C8C8;font-weight:500}
+
+/* ---- 两栏 ---- */
+.plan-cols{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:14px;align-items:start}
+.col-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.col-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+
+/* ---- 分层架构 ---- */
+.layers{display:flex;flex-direction:column;gap:10px}
+.layer{border:1px solid var(--line-soft);border-radius:var(--r-panel);background:var(--panel)}
+.layer-head{display:flex;align-items:center;gap:11px;padding:11px 14px 9px;flex-wrap:wrap}
+.l-badge{flex:none;width:34px;height:26px;border-radius:4px;border:1px solid var(--line);background:var(--cell-hi);display:grid;place-items:center;font-family:var(--f-mono);font-size:11.5px;font-weight:500;color:var(--paper)}
+.layer-head h3{font-size:13px;font-weight:600}
+.layer-head .note{margin-left:auto;font-size:11px;color:var(--ash-dim);white-space:nowrap}
+.layer-head .chip{margin-left:auto}
+.layer-body{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 13px}
+.lchip{display:inline-flex;align-items:baseline;gap:7px;border:1px solid var(--line);background:var(--cell);border-radius:4px;padding:5px 10px;font-size:11.5px;color:#C8C8C8;transition:background var(--t-press) linear,color var(--t-press) linear,border-color var(--t-press) linear}
+.lchip .lid{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--paper)}
+.lchip:hover{background:var(--cell-hi);color:var(--paper);border-color:#595959}
+.lchip:active{transform:scale(.97)}
+.layer.off{border-style:dashed;opacity:.66}
+.layer.off .l-badge{border-style:dashed;background:transparent}
+.layer.off .lchip{border-style:dashed}
+
+/* ---- 能力清单 ---- */
+.pscroll{overflow-x:auto}
+.ptable{min-width:780px}
+.prow{border:1px solid var(--line-soft);border-radius:var(--r-ctl);background:var(--panel);margin-bottom:8px;overflow:hidden;transition:border-color var(--t-press) linear}
+.prow:hover{background:var(--cell)}
+.prow[data-p="P4"]{border-style:dashed;opacity:.72}
+.prow.open{border-color:var(--accent-line);background:var(--cell)}
+.prow.flash{animation:rowflash 1.4s var(--ease)}
+@keyframes rowflash{0%,55%{box-shadow:inset 0 0 0 1px var(--accent-strong)}100%{box-shadow:inset 0 0 0 1px transparent}}
+.prow-h{display:grid;grid-template-columns:44px minmax(0,1fr) 56px 74px 44px 54px 16px;align-items:center;gap:8px;padding:10px 12px;width:100%}
+.p-id{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--paper)}
+.p-fn{min-width:0}
+.p-fn b{display:block;font-size:12.5px;font-weight:500;color:var(--paper);line-height:1.45}
+.p-fn i{display:block;font-style:normal;font-family:var(--f-mono);font-size:10.5px;color:var(--ash-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-way{font-family:var(--f-mono);font-size:10.5px;color:var(--ash);border:1px solid var(--line);border-radius:3px;padding:1px 6px;text-align:center;white-space:nowrap}
+.p-dep{font-family:var(--f-mono);font-size:11px;color:var(--ash-dim);text-align:center}
+.p-dep[data-z="1"]{color:var(--paper)}
+.p-cost{font-size:11px;color:var(--ash);text-align:center;white-space:nowrap}
+.p-chev{width:12px;height:12px;color:var(--ash-dim);transition:transform var(--t-press) var(--ease)}
+.prow.open .p-chev{transform:rotate(180deg)}
+.p-detail{padding:2px 14px 14px;animation:fadeIn .18s var(--ease) both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.dtail{display:flex;flex-direction:column;gap:9px;background:var(--cell);border:1px solid var(--line-soft);border-radius:var(--r-ctl);padding:12px 14px}
+.dtail > div{display:grid;grid-template-columns:46px minmax(0,1fr);gap:10px}
+.dtail dt{font-family:var(--f-mono);font-size:10.5px;color:var(--ash-dim);padding-top:2px}
+.dtail dd{font-size:12px;color:#C8C8C8;line-height:1.78;margin:0;min-width:0}
+.dtail dd .mono{font-size:11px;color:var(--ash)}
+.dtail dd.red{color:#D8D8D8}
+
+/* 优先级章：形状 + 明度，不引彩色 */
+.prio{font-family:var(--f-mono);font-size:10.5px;line-height:1.5;padding:1px 7px;border-radius:3px;text-align:center;white-space:nowrap;border:1px solid transparent}
+.prio[data-p="p0"]{background:var(--accent-strong);color:#141414;font-weight:600}
+.prio[data-p="p1"]{border-color:var(--accent-line);color:var(--paper);background:var(--accent-wash)}
+.prio[data-p="p2"]{border-style:dotted;border-color:#8a8a8a;color:var(--ash)}
+.prio[data-p="p3"]{border-style:dashed;border-color:#6e6e6e;color:var(--ash-dim)}
+.prio[data-p="p4"]{border-style:dashed;border-color:#717171;color:#9a9a9a;background:var(--reject-wash)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--ash-dim)}
+.legend .prio{font-size:10px;padding:0 6px;margin-right:6px}
+.sw-hatch{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--hatch);margin-right:6px;vertical-align:-1px}
+
+/* ---- 依赖账 ---- */
+.deps{display:flex;flex-direction:column;gap:9px}
+.dep{border:1px solid var(--line-soft);border-radius:var(--r-ctl);background:var(--cell);padding:11px 12px}
+.dep.pick{border-color:var(--accent-line);background:var(--accent-wash)}
+.dep.heavy{border-style:dashed;opacity:.72}
+.dep-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.dep-h b{font-size:12.5px;font-weight:600}
+.dep-h .chip{margin-left:auto}
+.dep-meta{font-family:var(--f-mono);font-size:10.5px;color:var(--ash);line-height:1.75}
+.dep-note{font-size:11px;color:var(--ash-dim);margin-top:5px;line-height:1.65}
+
+/* ---- 待拍板 ---- */
+.decides{display:flex;flex-direction:column;gap:9px}
+.q{border:1px solid var(--line-soft);border-radius:var(--r-ctl);background:var(--cell);padding:11px 12px;display:flex;flex-direction:column;gap:7px;transition:border-color var(--t-state) linear,background var(--t-state) linear}
+.q-h{display:flex;align-items:center;gap:8px}
+.q-id{font-family:var(--f-mono);font-size:11px;color:var(--ash-dim)}
+.st{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:3px;border:1px dashed #8a8a8a;color:var(--ash);margin-left:auto}
+.q h4{font-size:12.5px;font-weight:600;line-height:1.55}
+.q p{font-size:11.5px;color:var(--ash);line-height:1.68}
+.q-f{display:flex;align-items:center;gap:8px}
+.adv{font-family:var(--f-mono);font-size:10.5px;color:var(--paper);border:1px solid var(--accent-line);background:var(--accent-wash);border-radius:3px;padding:1px 6px;white-space:nowrap}
+.q .btn{margin-left:auto}
+.q.done{border-color:var(--accent-line);background:var(--accent-wash)}
+.q.done .st{border-style:solid;border-color:var(--accent-line);color:var(--paper);background:var(--accent-wash);animation:pop .34s var(--ease) both}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* ---- 红线 ---- */
+.xgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.x{border:1px solid var(--line-soft);border-radius:var(--r-ctl);background:var(--panel);padding:11px 13px;display:flex;gap:11px;min-width:0}
+.x-id{font-family:var(--f-mono);font-size:11px;color:var(--ash-dim);flex:none;padding-top:1px}
+.x b{display:block;font-size:12px;font-weight:600;margin-bottom:3px}
+.x p{font-size:11.5px;color:var(--ash);line-height:1.65}
+
+/* ---- 里程碑 ---- */
+.ms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.m{border:1px solid var(--line-soft);border-radius:var(--r-panel);background:var(--panel);padding:12px 13px 13px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.m-bar{height:3px;border-radius:2px;background:#3e3e3e;margin-bottom:3px}
+.m[data-s="p0"] .m-bar{background:var(--accent-strong)}
+.m[data-s="p1"] .m-bar{background:#CFCFD4}
+.m[data-s="p2"] .m-bar{background:var(--dotted)}
+.m[data-s="p3"] .m-bar{background:repeating-linear-gradient(90deg,#8a8a8a 0 4px,transparent 4px 8px)}
+.m[data-s="p4"] .m-bar{background:repeating-linear-gradient(135deg,#4a4a4a 0 3px,#2b2b2b 3px 6px)}
+.m.solo{border-style:dashed;opacity:.8}
+.m.solo .m-bar{background:repeating-linear-gradient(90deg,#5a5a5a 0 4px,transparent 4px 8px)}
+.m-h{display:flex;align-items:center;gap:8px}
+.m-id{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--paper)}
+.m-h .prio,.m-h .chip{margin-left:auto}
+.m h4{font-size:12px;font-weight:600;line-height:1.55}
+.m p{font-size:11px;color:var(--ash-dim);line-height:1.68}
+.m p b{color:var(--ash);font-weight:500}
+
+/* ---- 明确不做 ---- */
+.rgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.r{display:flex;gap:11px;border:1px dashed #565656;border-radius:var(--r-ctl);background:var(--panel);padding:11px 13px;opacity:.66;min-width:0}
+.r i{width:3px;flex:none;align-self:stretch;background:var(--hatch);border-radius:2px}
+.r-id{font-family:var(--f-mono);font-size:11px;color:#B4B4B4;margin-right:7px}
+.r b{font-size:12px;font-weight:500;color:#B4B4B4}
+.r p{font-size:11px;color:var(--ash-dim);line-height:1.65;margin-top:3px}
+
+/* ---- 一页纸 ---- */
+.paper{border:1px solid var(--line-soft);border-radius:var(--r-panel);background:var(--panel);padding:16px 18px}
+.paper h2{font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:9px}
+.paper h2 .chip{margin-left:auto}
+.plist{display:flex;flex-direction:column;gap:8px}
+.pl{display:flex;gap:11px;font-size:12px;color:#C8C8C8;line-height:1.72}
+.pl .n{font-family:var(--f-mono);font-size:10.5px;color:var(--ash-dim);flex:none;padding-top:2px}
+.docpath{margin-top:13px;padding-top:11px;border-top:1px solid var(--line-soft);font-family:var(--f-mono);font-size:10.5px;color:var(--ash-dim);line-height:1.7}
+
+/* ---------------- responsive ---------------- */
+@media(max-width:1180px){
+  .plan-cols{grid-template-columns:minmax(0,1fr)}
+  .ms{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:980px){
+  .app{flex-direction:column-reverse}
+  .rail{width:auto;flex:0 0 auto;height:auto;position:sticky;top:auto;bottom:0;flex-direction:row;border-right:0;border-top:1px solid var(--line-soft);z-index:50}
+  .rail-mark,.rail-foot{display:none}
+  .rail-nav{flex-direction:row;padding:6px;justify-content:space-around;width:100%;gap:0}
+  .rail-ind{left:6px}
+  .navbtn{width:auto;flex:1 1 0;height:48px;min-width:0}
+  .plan,.vhead,.filterbar{padding-inline:14px}
+  .trio{grid-template-columns:1fr}
+  .xgrid,.rgrid{grid-template-columns:1fr}
+  .ms{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="rail">
+    <div class="rail-mark"><b>GachaBench</b></div>
+    <nav class="rail-nav" id="nav" aria-label="主导航">
+      <span class="rail-ind" id="ind"></span>
+      <button class="navbtn" data-view="other">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg>
+        抽卡台
+      </button>
+      <button class="navbtn" data-view="other">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7h16M4 12h9M4 17h5"/><circle cx="18.5" cy="16.5" r="2.5"/></svg>
+        拆分台
+      </button>
+      <button class="navbtn" data-view="other">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h9l5 5v11H5z"/><path d="M14 4v5h5M8.5 13h7M8.5 16h4"/></svg>
+        定位工单
+      </button>
+      <button class="navbtn" data-view="other">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l4.5-4 4 3.5 3-2.5L21 16"/><circle cx="8.5" cy="9" r="1.3"/></svg>
+        资产管理
+      </button>
+      <button class="navbtn" data-view="plan" aria-current="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3l8 4.5-8 4.5-8-4.5L12 3z"/><path d="M4 12.5l8 4.5 8-4.5"/></svg>
+        整合方案
+      </button>
+    </nav>
+    <div class="rail-foot">
+      <div class="health"><i class="dot on"></i>ffmpeg 可用</div>
+      <div class="health"><i class="dot on"></i>ComfyUI 8188</div>
+      <div class="health" style="color:#8E8E94">工作区 复试2</div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <section class="view on" id="view-plan">
+      <div class="vhead">
+        <div>
+          <h1>整合方案</h1>
+          <div class="sub">GachaBench × novel-booksource-engine · 盘点 2026-10-17 · 结论先行：能整合的是「能力」，不是「业务」</div>
+        </div>
+        <div class="grow"></div>
+        <span class="chip mono warn" id="planSt">待拍板</span>
+        <button class="btn ghost" id="btnDoc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 16.5h4"/></svg>
+          方案文档
+        </button>
+      </div>
+
+      <div class="plan">
+
+        <!-- ========== 结论先行 ========== -->
+        <div>
+          <div class="sec-h"><h2>结论先行</h2><span class="hint">三条判断 · 来自方案文档 §0</span><div class="grow"></div><span class="chip mono">03</span></div>
+          <div class="trio">
+            <div class="tcard">
+              <span class="no">01 · 缺口判断</span>
+              <h3>缺的不是小说，是入口</h3>
+              <p>GB 的真实缺口是<b>输入侧没有入口</b>：结构化提示词 md 全靠外部产出。NBE 只能填一半——给文本；「文本 → §①–§⑥」的改编在 v1 边界之外（<span class="mono">/api/agent</span> 501）。联网采集的性价比远低于直觉。</p>
+            </div>
+            <div class="tcard">
+              <span class="no">02 · 基建判断</span>
+              <h3>高性价比在基建，不在业务</h3>
+              <p>NBE 已踩完「FastAPI + React + Tauri 双形态」整套坑：前端自主托管、导出契约、设置模型、首屏缓存——四件搬过来，<b>新增第三方依赖为 0</b>。UI 只借交互模式，样式全部重写。</p>
+            </div>
+            <div class="tcard warn">
+              <span class="no">03 · 样式判断</span>
+              <h3>一个组件都搬不动 <span class="chip warn">X-1 / X-2</span></h3>
+              <p>React 18 + JSX + 铜金双主题 <b>vs</b> React 19 + TS 6 + 零彩度金属灰 <span class="mono">--gb-*</span>。npm 包与组件不可共享；NBE 的 <span class="mono">useState</span> 编排要改写为 Query + zustand 分工。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 两栏：分层 + 清单 ｜ 依赖账 + 待拍板 ========== -->
+        <div class="plan-cols">
+          <div class="col-main">
+
+            <!-- 分层架构 -->
+            <div>
+              <div class="sec-h"><h2>分层架构</h2><span class="hint">四层可独立落地 · 点层内胶囊直接跳到清单行</span><div class="grow"></div><span class="chip mono">L0–L3</span></div>
+              <div class="layers">
+                <div class="layer">
+                  <div class="layer-head"><span class="l-badge">L0</span><h3>第 0 层 · 壳与通道</h3><span class="note">不影响业务逻辑</span></div>
+                  <div class="layer-body">
+                    <button class="lchip" data-jump="I1"><span class="lid">I1</span>前端自主托管 + IPC</button>
+                    <button class="lchip" data-jump="I2"><span class="lid">I2</span>导出三态契约</button>
+                    <button class="lchip" data-jump="I3"><span class="lid">I3</span>偏好持久化</button>
+                  </div>
+                </div>
+                <div class="layer">
+                  <div class="layer-head"><span class="l-badge">L1</span><h3>第 1 层 · 文本入口</h3><span class="note">补齐上游，不碰既有不变式</span></div>
+                  <div class="layer-body">
+                    <button class="lchip" data-jump="C1"><span class="lid">C1</span>文本卫生</button>
+                    <button class="lchip" data-jump="C2"><span class="lid">C2</span>本地书库</button>
+                    <button class="lchip" data-jump="C4"><span class="lid">C4</span>范围导出</button>
+                  </div>
+                </div>
+                <div class="layer">
+                  <div class="layer-head"><span class="l-badge">L2</span><h3>第 2 层 · 体验与控制流</h3><span class="note">要动既有页面</span></div>
+                  <div class="layer-body">
+                    <button class="lchip" data-jump="P2"><span class="lid">P2</span>设置视图</button>
+                    <button class="lchip" data-jump="P1"><span class="lid">P1</span>阅读面板</button>
+                    <button class="lchip" data-jump="O2"><span class="lid">O2</span>首屏缓存</button>
+                    <button class="lchip" data-jump="O1"><span class="lid">O1</span>多端点调度</button>
+                    <button class="lchip" data-jump="I4"><span class="lid">I4</span>API 强化</button>
+                    <button class="lchip" data-jump="I5"><span class="lid">I5</span>健康灯</button>
+                  </div>
+                </div>
+                <div class="layer off">
+                  <div class="layer-head"><span class="l-badge">L3</span><h3>第 3 层 · 联网采集</h3><span class="chip warn">默认关闭 · 暂缓</span></div>
+                  <div class="layer-body">
+                    <button class="lchip" data-jump="C3"><span class="lid">C3</span>书源引擎整包 · +6 依赖 · +15~45MB</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 能力清单 -->
+            <div>
+              <div class="sec-h"><h2>能力清单</h2><span class="hint">点任一行展开：做什么 / 红线 / 验收</span><div class="grow"></div><span class="chip mono" id="pCount">14 / 14 项</span></div>
+              <div class="filterbar">
+                <div class="seg" id="fPrio"><span class="seg-thumb" id="fThumb"></span>
+                  <button data-f="all" aria-pressed="true">全部</button>
+                  <button data-f="P0">P0</button>
+                  <button data-f="P1">P1</button>
+                  <button data-f="P2">P2</button>
+                  <button data-f="P3">P3</button>
+                  <button data-f="P4">暂缓</button>
+                </div>
+                <button class="chip mono" id="fDep" aria-pressed="false">零新依赖</button>
+                <div class="grow"></div>
+                <div class="legend">
+                  <span><span class="prio" data-p="p0">P0</span>现在就做</span>
+                  <span><span class="prio" data-p="p1">P1</span>下一迭代</span>
+                  <span><span class="prio" data-p="p2">P2</span>排着</span>
+                  <span><span class="prio" data-p="p3">P3</span>以后</span>
+                  <span><span class="prio" data-p="p4">暂缓</span>默认关闭</span>
+                  <span><i class="sw-hatch"></i>明确不做</span>
+                </div>
+              </div>
+
+              <div class="pscroll">
+                <div class="ptable">
+
+                  <div class="prow" data-id="C1" data-p="P0" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">C1</span>
+                      <span class="p-fn"><b>文本卫生 clean_text</b><i>engine/textclean.py → backend/textclean.py · 导入接口</i></span>
+                      <span class="p-way">移植</span>
+                      <span class="prio" data-p="p0">P0</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">极低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>把 <span class="mono">clean_text()</span> 搬进 <span class="mono">backend/textclean.py</span>，保持纯函数、零依赖；拆两层——通用（strip_html / unescape / 零宽 / 空白折叠）与网文向（strip_ads / strip_urls），后者只在采集路径用。</dd></div>
+                      <div><dt>红线</dt><dd class="red">禁止出现在 <span class="mono">提示词/*.md</span> 读取链。<span class="mono">splitter</span> / <span class="mono">prompt_locator</span> 解析的 md 是唯一真相，清洗会移动行号、工单就废了。只做导入入口（粘贴 / 上传 / 摘录）。</dd></div>
+                      <div><dt>验收</dt><dd>含 <span class="mono">&lt;div&gt;&lt;br&gt;</span>、<span class="mono">&amp;nbsp;</span>、<span class="mono">www.x.com正文</span>、零宽字符的脏文本 → 段落规整的纯文本，且「WWW 域名后面的中文」不被吞掉。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="O2" data-p="P0" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">O2</span>
+                      <span class="p-fn"><b>首屏 SWR 缓存</b><i>state/searchCache.jsx + 徽标 → 卡池 / 素材库 query</i></span>
+                      <span class="p-way">借鉴</span>
+                      <span class="prio" data-p="p0">P0</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>卡池 / 素材库先用上次结果渲染，后台扫盘完成再替换。新增 <span class="mono">lib/swrCache.ts</span>（键 = 工作区签名 + 视图 + 筛选），TanStack Query 用 <span class="mono">placeholderData</span> 注入。</dd></div>
+                      <div><dt>边界</dt><dd>缓存必须可识别为旧——标题旁挂虚线徽标「旧结果 · 更新中」；扫描按钮强制绕过缓存。绝不能「删了文件但列表还在」且无提示。</dd></div>
+                      <div><dt>参考</dt><dd>NBE 容量上限：12 条查询 / 60 条结果 / 14 天。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="P2" data-p="P1" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">P2</span>
+                      <span class="p-fn"><b>设置视图（五组）</b><i>SettingsView.jsx + RANGES → #/settings + PUT /api/config</i></span>
+                      <span class="p-way">改写</span>
+                      <span class="prio" data-p="p1">P1</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">中</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>新视图 <span class="mono">#/settings</span>，五组：连接 / 跑片 / 工作流 / 文件夹 / 界面。滑杆 + 越界钳制，前端 <span class="mono">RANGES</span> 与后端 pydantic 校验共用一份取值，越界回落默认而不是 500。</dd></div>
+                      <div><dt>红线</dt><dd class="red">config 是两层——全局 <span class="mono">config.json</span> 与每工作区 <span class="mono">folders</span> 覆盖。全局项走 <span class="mono">PUT /api/config</span>，工作区项走 <span class="mono">PATCH /api/workspaces/{name}/folders</span>；UI 用实线 / 虚线区分，否则跨工作区污染（X-10）。</dd></div>
+                      <div><dt>建议</dt><dd><span class="mono">workflow.nodes</span> 只读展示 + 从 workflows 路由切换，避免手抖改坏节点号。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="I2" data-p="P1" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">I2</span>
+                      <span class="p-fn"><b>导出通道三态契约</b><i>_download_payload + save_export → /api/export + 拼接 / 工单 / 清单</i></span>
+                      <span class="p-way">移植</span>
+                      <span class="prio" data-p="p1">P1</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">中</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd><span class="mono">/api/export</span> 三态契约——download（JSON + base64）/ file（直接写盘）/ dir（目录 + count）。拼接、工单、清单共用这一条通道。</dd></div>
+                      <div><dt>落地</dt><dd>后端 <span class="mono">export.py</span>（payload_download / write_to_dir）+ 壳层 <span class="mono">save_export</span> command + 前端 <span class="mono">lib/download.ts</span>；桌面模式弹目录复用 <span class="mono">folder_pick.py</span>。</dd></div>
+                      <div><dt>收益</dt><dd>工单批量导出、拆分清单、成片交付都能复用，不用各写一套。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="I3" data-p="P1" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">I3</span>
+                      <span class="p-fn"><b>UI 偏好持久化</b><i>lib/storage.js → lib/prefs.ts · gb.ui.v1</i></span>
+                      <span class="p-way">移植</span>
+                      <span class="prio" data-p="p1">P1</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd><span class="mono">lib/prefs.ts</span>——版本化 key（<span class="mono">gb.ui.v1</span>）+ 深合并 + clamp，≈80 行。刷新后视图 / 筛选 / 卡片密度不丢。</dd></div>
+                      <div><dt>边界</dt><dd>只有 UI 偏好进 localStorage；业务数据仍以工作区磁盘 + <span class="mono">cards.db</span> 为真相（X-3）。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="I1" data-p="P1" data-dep="1">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">I1</span>
+                      <span class="p-fn"><b>壳层前端自主托管 <span class="chip warn">独立立项</span></b><i>src-tauri lib.rs + IPC → desktop/ + lib/api.ts</i></span>
+                      <span class="p-way">改写</span>
+                      <span class="prio" data-p="p1">P1</span>
+                      <span class="p-dep">+1</span>
+                      <span class="p-cost">高</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd><span class="mono">frontendDist</span> 改真前端 + <span class="mono">get_backend_url</span> IPC；后端慢 / 挂掉时页面显示「重连」而不是白屏。</dd></div>
+                      <div><dt>成本</dt><dd>前端 14 个文件 47 处 <span class="mono">/api</span> 字面量 + 2 处前端拼的媒体 URL + 后端回传的相对 URL（assets.py 的 url、generate.py 两个 helper）——最容易漏的是图片 / 音频预览 404。</dd></div>
+                      <div><dt>纪律</dt><dd class="red">后端产物绝不能输出到 <span class="mono">dist/</span>——Tauri 会把 frontendDist 整个嵌进 exe，NBE 踩过 8MB→49MB、启动解压上百 MB 变黑屏的坑。</dd></div>
+                      <div><dt>结论</dt><dd>建议只有白屏仍复现时才做，别和功能整合混在一个迭代。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="P1" data-p="P2" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">P1</span>
+                      <span class="p-fn"><b>阅读面板</b><i>ReaderView.jsx + TocDrawer → ShotLocator 正文区</i></span>
+                      <span class="p-way">改写</span>
+                      <span class="prio" data-p="p2">P2</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">中高</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>ShotLocator 正文区叠五个排版变量（fontSize / lineHeight / letterSpacing / paragraphGap / contentWidth）+ ←→ 跳镜 + 镜表目录抽屉（数据源 §③bis 镜表）。</dd></div>
+                      <div><dt>红线</dt><dd class="red">行号优先于好看——行号沟槽常驻（IBM Plex Mono），排版变量只作用正文列宽与行距，不改行高基准，否则行号与视觉行的对应会漂。</dd></div>
+                      <div><dt>取舍</dt><dd>保留 <span class="mono">&lt;pre&gt;</span>，不引入 markdown 渲染，保「复制原文」保真度。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="O1" data-p="P2" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">O1</span>
+                      <span class="p-fn"><b>候选源调度骨架</b><i>engine/aggregator.py → 多 ComfyUI 端点 / 多工作流回退</i></span>
+                      <span class="p-way">借鉴</span>
+                      <span class="prio" data-p="p2">P2</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">高</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>借 Aggregator 控制流——候选端点列表；每端点独立锁（同端点串行、不同端点并行）；到点未完成就放弃、不影响整体；首选失败按序换下一个（重提交同 chunk、沿用同 seed）。</dd></div>
+                      <div><dt>警告</dt><dd class="red">必须改写成 <span class="mono">asyncio.gather</span> + <span class="mono">Semaphore</span> + <span class="mono">wait(timeout)</span>。照搬线程池会切断 comfy.py 的异步链（X-8）。</dd></div>
+                      <div><dt>成本</dt><dd>唯一要动 comfy.py（783 行）+ generate.py（840 行）的方案。建议先只做「配置层多端点 + 手动切换」，自动 failover 留到有双机环境再上。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="I4" data-p="P2" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">I4</span>
+                      <span class="p-fn"><b>API 客户端强化</b><i>lib/api.js → lib/api.ts · 错误分型 + 退避 + abort</i></span>
+                      <span class="p-way">改写</span>
+                      <span class="prio" data-p="p2">P2</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd><span class="mono">lib/api.ts</span> 错误分型（网络 / 4xx / 5xx / abort）+ 指数退避 + AbortController，与 TanStack Query 重试策略对齐。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="I5" data-p="P2" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">I5</span>
+                      <span class="p-fn"><b>侧栏常驻健康状态</b><i>Sidebar.jsx → Rail 底部</i></span>
+                      <span class="p-way">改写</span>
+                      <span class="prio" data-p="p2">P2</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>Rail 底部常驻连接状态（ffmpeg / ComfyUI），形状 + 明度表达，不引彩色。补 G-8：健康状态不再只在启动页。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="C2" data-p="P2" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">C2</span>
+                      <span class="p-fn"><b>本地原著 / 剧本库</b><i>textclean + 章节切分 → {工作区}/原著/ + books / chapters 表</i></span>
+                      <span class="p-way">新建</span>
+                      <span class="prio" data-p="p2">P2</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">中高</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>外来文本入库——手动导入 txt/md 或剪贴板粘贴，按章节切分、净化、落盘、建索引。落盘 <span class="mono">{工作区}/原著/&lt;书名&gt;/0001 第x章.md</span>（补零 4 位）；cards.db 加 books / chapters 两表。</dd></div>
+                      <div><dt>边界</dt><dd class="red">只做「引用片段」，不做「生成提示词 md」——那一步是 LLM 的活，v1 之外（X-4）。UI 上要写明「仅摘录，不改写」。</dd></div>
+                      <div><dt>落位</dt><dd><span class="mono">folders.source = 「原著」</span>；已有工作区下次扫描时按需 backfill，缺失则补建、已有则跳过，不强行重建。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="C4" data-p="P3" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">C4</span>
+                      <span class="p-fn"><b>范围导出（第 x–y 章）</b><i>export_txt_dir / chapter_filename → 提示词 / 工单批量导出</i></span>
+                      <span class="p-way">移植</span>
+                      <span class="prio" data-p="p3">P3</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>第 x–y 章范围导出，每章一文件打 zip；复用 M3 的导出通道，不新写一套。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="P3" data-p="P3" data-dep="0">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">P3</span>
+                      <span class="p-fn"><b>历史与最近</b><i>state/library.jsx → 最近打开的段 / 卡</i></span>
+                      <span class="p-way">借鉴</span>
+                      <span class="prio" data-p="p3">P3</span>
+                      <span class="p-dep" data-z="1">0</span>
+                      <span class="p-cost">低</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>最近打开的段 / 卡 + 搜索历史 chips，进 localStorage（配合 I3）。</dd></div>
+                    </dl></div>
+                  </div>
+
+                  <div class="prow" data-id="C3" data-p="P4" data-dep="6">
+                    <button class="prow-h" aria-expanded="false">
+                      <span class="p-id">C3</span>
+                      <span class="p-fn"><b>联网书源采集（68 源）</b><i>evaluator / pipeline / js_sandbox / aggregator → 独立可选模块</i></span>
+                      <span class="p-way">移植整包</span>
+                      <span class="prio" data-p="p4">暂缓</span>
+                      <span class="p-dep">+6</span>
+                      <span class="p-cost">极高</span>
+                      <svg class="p-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="p-detail" hidden><dl class="dtail">
+                      <div><dt>做什么</dt><dd>书源引擎整包（≈1,300 行）+ 6 个依赖，做成默认关闭的独立可选模块。</dd></div>
+                      <div><dt>前置</dt><dd class="red">先拍板「改编谁来做」。quickjs 仅 cp312 有 wheel——GB 后端已固定 3.12，这是唯一能做的前提。</dd></div>
+                      <div><dt>裁剪</dt><dd>砍掉字体解密（R2）后只需支持无解密书源子集，体积从 +45MB 降到 +15MB 左右。</dd></div>
+                    </dl></div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右栏 -->
+          <div class="col-side">
+            <div class="card">
+              <h2>依赖账</h2>
+              <p class="desc">三档可独立落地。轻档零新依赖，是首选路径。</p>
+              <div class="deps">
+                <div class="dep pick">
+                  <div class="dep-h"><b>轻档</b><span class="chip ok">首选</span></div>
+                  <div class="dep-meta">C1 · C2 · C4 · O2 · P1 · P2 · I2 · I3 · I4 · I5</div>
+                  <div class="dep-meta">后端 0 · 前端 0 · 体积 ~0</div>
+                </div>
+                <div class="dep">
+                  <div class="dep-h"><b>中档</b><span class="chip">+ I1 壳层</span></div>
+                  <div class="dep-meta">后端 0 · 前端 +1 包 · 体积 ~0</div>
+                  <div class="dep-note">前端产物位置纪律：后端产物绝不进 dist/（Tauri 黑屏坑）。</div>
+                </div>
+                <div class="dep heavy">
+                  <div class="dep-h"><b>重档</b><span class="chip warn">+ C3 联网采集</span></div>
+                  <div class="dep-meta">后端 +6 · 前端 0 · 体积 +15~45MB</div>
+                  <div class="dep-note">hiddenimports、构建时间变长；火绒 HIPS 会对新 hash 的 exe 重新拦截。</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>待拍板 <span class="chip mono" id="decCount">已定 0 / 5</span></h2>
+              <p class="desc">五项决策过完才能进实现。建议项只是建议，可改。</p>
+              <div class="decides">
+                <div class="q" data-q="1">
+                  <div class="q-h"><span class="q-id">Q1</span><span class="st">未定</span></div>
+                  <h4>C3 联网采集到底做不做？</h4>
+                  <p>如果改编仍靠人工，C3 的收益只剩「省一次复制粘贴」。</p>
+                  <div class="q-f"><span class="adv">建议 · 不做</span><button class="btn sm">拍板</button></div>
+                </div>
+                <div class="q" data-q="2">
+                  <div class="q-h"><span class="q-id">Q2</span><span class="st">未定</span></div>
+                  <h4>C2 的导入格式？</h4>
+                  <p>只支持 txt/md（成本最低），还是要 epub（需新依赖，破坏轻档零依赖）。</p>
+                  <div class="q-f"><span class="adv">建议 · txt / md</span><button class="btn sm">拍板</button></div>
+                </div>
+                <div class="q" data-q="3">
+                  <div class="q-h"><span class="q-id">Q3</span><span class="st">未定</span></div>
+                  <h4>folders.source 默认名？</h4>
+                  <p>原著 / 剧本 / 小说？以及已有工作区是否自动 backfill（会动到 workspaces.py 与用户目录）。</p>
+                  <div class="q-f"><span class="adv">建议 · 原著 + 按需补建</span><button class="btn sm">拍板</button></div>
+                </div>
+                <div class="q" data-q="4">
+                  <div class="q-h"><span class="q-id">Q4</span><span class="st">未定</span></div>
+                  <h4>I1 壳层现在就做吗？</h4>
+                  <p>当前 navigate 方案在目标机上是否还会白屏？稳定就别和功能整合混在一个迭代。</p>
+                  <div class="q-f"><span class="adv">建议 · 复现才做</span><button class="btn sm">拍板</button></div>
+                </div>
+                <div class="q" data-q="5">
+                  <div class="q-h"><span class="q-id">Q5</span><span class="st">未定</span></div>
+                  <h4>设置视图的权限边界？</h4>
+                  <p>workflow.nodes 改错就出废片，界面上只读展示还是可编辑。</p>
+                  <div class="q-f"><span class="adv">建议 · 只读 + 路由切换</span><button class="btn sm">拍板</button></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 红线 ========== -->
+        <div>
+          <div class="sec-h"><h2>红线与冲突</h2><span class="hint">10 项，整合时必须服从</span><div class="grow"></div><span class="chip mono">X-1 – X-10</span></div>
+          <div class="xgrid">
+            <div class="x"><span class="x-id">X-1</span><div><b>设计系统</b><p>只借模式不借样式。颜色全走 --gb-*，状态用实线 / 虚线 / 斜纹；一个 JSX 都不复制。</p></div></div>
+            <div class="x"><span class="x-id">X-2</span><div><b>框架代际</b><p>不共享 npm 包与组件。NBE 的 useState 编排要改写为 Query + zustand 分工。</p></div></div>
+            <div class="x"><span class="x-id">X-3</span><div><b>数据模型</b><p>书库进 &lt;工作区&gt;/.gachabench/cards.db，服从 I-2 自包含；只有 UI 偏好进 localStorage。</p></div></div>
+            <div class="x"><span class="x-id">X-4</span><div><b>v1 边界</b><p>采集 / 导入只到「文本」。不承诺「一键出剧本」；改编要做是新立项，不是本次整合。</p></div></div>
+            <div class="x"><span class="x-id">X-5</span><div><b>铁律 I-1 + 行号可信度</b><p>textclean 禁止上 提示词/*.md 读取链（splitter / prompt_locator）。只做导入入口。</p></div></div>
+            <div class="x"><span class="x-id">X-6</span><div><b>网络与合规</b><p>默认只做本地导入；联网采集默认关闭 + 免责 + 来源标注；字体解密不做（R2）。</p></div></div>
+            <div class="x"><span class="x-id">X-7</span><div><b>依赖与打包</b><p>轻档零依赖是首选路径；重档 +6 依赖，且火绒会对新 hash 的 exe 重新拦截。</p></div></div>
+            <div class="x"><span class="x-id">X-8</span><div><b>并发模型</b><p>调度器用 asyncio.Semaphore；不要在线程池里调 comfy.py，会卡死轮询。</p></div></div>
+            <div class="x"><span class="x-id">X-9</span><div><b>进程模型</b><p>同进程挂 library router。不起第二个 sidecar、不引入第二套端口与生命周期。</p></div></div>
+            <div class="x"><span class="x-id">X-10</span><div><b>设置双层</b><p>设置页必须显式分层（全局 / 本工作区），否则跨工作区污染——历史踩过。</p></div></div>
+          </div>
+        </div>
+
+        <!-- ========== 里程碑 ========== -->
+        <div>
+          <div class="sec-h"><h2>里程碑</h2><span class="hint">M1–M7 + I1 单独立项 · 顶条明度 = 优先级形状</span><div class="grow"></div><span class="chip mono">08</span></div>
+          <div class="ms">
+            <div class="m" data-s="p0">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M1</span><span class="prio" data-p="p0">P0</span></div>
+              <h4>C1 文本卫生 + O2 首屏缓存</h4>
+              <p><b>验收</b> · 脏文本 → 规整纯文本、域名后中文不丢；二次进入卡池先出缓存并挂「旧结果」徽标；提示词读取链零改动（grep 证明）</p>
+            </div>
+            <div class="m" data-s="p1">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M2</span><span class="prio" data-p="p1">P1</span></div>
+              <h4>P2 设置视图 + I3 偏好持久化</h4>
+              <p><b>验收</b> · 跑片参数界面改并落 config.json；越界钳制不 500；工作区目录改动只影响本工作区；刷新不丢视图 / 筛选</p>
+            </div>
+            <div class="m" data-s="p1">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M3</span><span class="prio" data-p="p1">P1</span></div>
+              <h4>I2 导出通道</h4>
+              <p><b>验收</b> · web / desktop 双形态都能导出，kind 三态齐全；拼接连带导出不覆盖原产物</p>
+            </div>
+            <div class="m" data-s="p2">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M4</span><span class="prio" data-p="p2">P2</span></div>
+              <h4>P1 阅读面板 + C2 本地书库 + I5 + I4</h4>
+              <p><b>验收</b> · 阅读面板行号与 &lt;pre&gt; 保真；书库随工作区拷走仍可用</p>
+            </div>
+            <div class="m" data-s="p2">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M5</span><span class="prio" data-p="p2">P2</span></div>
+              <h4>O1 多端点调度 · 需双机</h4>
+              <p><b>验收</b> · 手动切换端点跑片；自动 failover 单独评审</p>
+            </div>
+            <div class="m" data-s="p3">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M6</span><span class="prio" data-p="p3">P3</span></div>
+              <h4>C4 范围导出 + P3 历史</h4>
+              <p><b>验收</b> · 按范围导出 + 每章一文件打 zip</p>
+            </div>
+            <div class="m" data-s="p4">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">M7</span><span class="prio" data-p="p4">暂缓</span></div>
+              <h4>C3 联网采集 · 独立评审</h4>
+              <p><b>验收</b> · 默认关闭；免责声明；来源标注；只支持无字体解密源</p>
+            </div>
+            <div class="m solo" data-s="solo">
+              <span class="m-bar"></span>
+              <div class="m-h"><span class="m-id">I1</span><span class="chip warn">独立立项</span></div>
+              <h4>壳层前端自主托管</h4>
+              <p><b>验收</b> · 后端挂掉时页面显示「重连」而非白屏；只有白屏仍复现时才启动</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== 明确不做 ========== -->
+        <div>
+          <div class="sec-h"><h2>明确不做</h2><span class="hint">6 项，各有理由 · 斜纹 + 66% 明度 = 废稿语言</span><div class="grow"></div><span class="chip mono">R1 – R6</span></div>
+          <div class="rgrid">
+            <div class="r"><i></i><div><div><span class="r-id">R1</span><b>QuickJS 沙箱 + java.* 桥</b></div><p>唯一能想到的用途是「提示词变换脚本」，而 GB 的铁律是「正文字词一字不改」（I-1）。能力与约束方向相反。</p></div></div>
+            <div class="r"><i></i><div><div><span class="r-id">R2</span><b>字体解密 replaceFont</b></div><p>纯反爬对抗技术，GB 无此场景；且属「规避技术措施」，合规上最不该带进来的一项。</p></div></div>
+            <div class="r"><i></i><div><div><span class="r-id">R3</span><b>书源 DSL 全量解释器</b></div><p>1,300 行 + 6 依赖，只有做 C3 时才需要。轻档方案里它是纯负担。</p></div></div>
+            <div class="r"><i></i><div><div><span class="r-id">R4</span><b>EPUB3 导出</b></div><p>GB 产物是 mp4 / txt 工单，EPUB 无消费者。</p></div></div>
+            <div class="r"><i></i><div><div><span class="r-id">R5</span><b>第二个 sidecar 进程</b></div><p>双进程 = 双端口 / 双日志 / 双生命周期 / 双份杀软误报面。同进程挂 router 完全够。</p></div></div>
+            <div class="r"><i></i><div><div><span class="r-id">R6</span><b>直接复用 NBE 的 JSX 组件</b></div><p>代际 + 语言 + 设计系统三重不兼容（X-1 / X-2），复制过来等于重写两遍。</p></div></div>
+          </div>
+        </div>
+
+        <!-- ========== 一页纸 ========== -->
+        <div class="paper">
+          <h2>一页纸总结 <span class="chip mono warn">方案待拍板</span></h2>
+          <div class="plist">
+            <div class="pl"><span class="n">01</span><span>能整合的是「能力」，不是「业务」——五项基建 / 模式（文本卫生、首屏缓存、设置模型、导出契约、偏好持久化）零新依赖、风险可控。</span></div>
+            <div class="pl"><span class="n">02</span><span>业务链路上 NBE 只能补一半：它给文本，GB 缺的是「文本 → 结构化提示词」的改编，而那条线在 v1 边界之外（/api/agent 501）。</span></div>
+            <div class="pl"><span class="n">03</span><span>联网采集是性价比最低的一项：+6 依赖 / +体积 / 合规面 / 与铁律相邻。建议做成默认关闭的独立可选模块，且砍掉字体解密。</span></div>
+            <div class="pl"><span class="n">04</span><span>UI 一个组件都别搬：零彩度设计系统 + React 19 / TS 6 与 NBE 的 React 18 / JSX 不兼容，只借交互模式。</span></div>
+            <div class="pl"><span class="n">05</span><span>先做 C1 + O2 + P2：三件事都打在 GB 自己的痛点上（无文本卫生、首屏扫盘即等、无设置界面），且不碰任何既有不变式。</span></div>
+          </div>
+          <div class="docpath">docs/INTEGRATION-novel-booksource-engine.md · 盘点 2026-10-17 · GB 后端 5,826 行 / NBE 引擎 2,400 行 + 前端 2,300 行</div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+const $=(s,r)=>(r||document).querySelector(s);
+const $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
+
+/* ---------------- toast ---------------- */
+function toast(title, sub, k){
+  const t=document.createElement('div');
+  t.className='toast'; t.dataset.k=k||'ok';
+  let h='<b>'+title+'</b>';
+  if(sub) h+='<small>'+sub+'</small>';
+  t.innerHTML=h;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),220); }, 2400);
+}
+
+/* ---------------- 视图切换 ---------------- */
+function goView(view){
+  $$('.view').forEach(v=>v.classList.toggle('on', v.id==='view-'+view));
+  const btns=$$('#nav .navbtn');
+  btns.forEach(b=>b.setAttribute('aria-current', String(b.dataset.view===view)));
+  const b=btns.filter(x=>x.dataset.view===view)[0];
+  const ind=$('#ind');
+  if(b){
+    if(window.innerWidth<=980){
+      ind.style.width=b.offsetWidth+'px';
+      ind.style.height=b.offsetHeight+'px';
+      ind.style.transform='translateX('+(b.offsetLeft-6)+'px)';
+    }else{
+      ind.style.width='68px';
+      ind.style.height=b.offsetHeight+'px';
+      ind.style.transform='translateY('+b.offsetTop+'px)';
+    }
+  }
+  window.scrollTo(0,0);
+}
+$$('#nav .navbtn').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.view==='plan'){ goView('plan'); return; }
+  toast('此原型只画了整合方案','抽卡台 / 拆分台 / 定位工单 / 资产管理 见 prototype/index.html','ok');
+}));
+
+/* ---------------- 优先级筛选 ---------------- */
+let FP='all', FD=false;
+function moveThumb(){
+  const seg=$('#fPrio'), btn=$('button[aria-pressed="true"]',seg), th=$('#fThumb');
+  if(!btn){ th.style.opacity='0'; return; }
+  th.style.opacity='1';
+  th.style.width=btn.offsetWidth+'px';
+  th.style.transform='translateX('+(btn.offsetLeft-2)+'px)';
+}
+function applyFilter(){
+  let n=0;
+  $$('.prow').forEach(r=>{
+    const okP = FP==='all' || r.dataset.p===FP;
+    const okD = !FD || r.dataset.dep==='0';
+    const show = okP && okD;
+    r.style.display = show ? '' : 'none';
+    if(show) n++;
+  });
+  $('#pCount').textContent = n+' / 14 项';
+}
+$$('#fPrio button').forEach(b=>b.addEventListener('click',()=>{
+  $$('#fPrio button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  FP=b.dataset.f; moveThumb(); applyFilter();
+}));
+$('#fDep').addEventListener('click', function(){
+  FD=!FD;
+  this.setAttribute('aria-pressed', String(FD));
+  applyFilter();
+});
+
+/* ---------------- 行展开 ---------------- */
+function setRow(row, open){
+  row.classList.toggle('open', open);
+  $('.prow-h',row).setAttribute('aria-expanded', String(open));
+  $('.p-detail',row).hidden = !open;
+}
+$$('.prow-h').forEach(h=>h.addEventListener('click',()=>{
+  const row=h.closest('.prow');
+  setRow(row, !row.classList.contains('open'));
+}));
+
+/* ---------------- 层内胶囊 → 跳清单行 ---------------- */
+$$('[data-jump]').forEach(b=>b.addEventListener('click',()=>{
+  const id=b.dataset.jump;
+  FP='all'; FD=false;
+  $$('#fPrio button').forEach(x=>x.setAttribute('aria-pressed', String(x.dataset.f==='all')));
+  $('#fDep').setAttribute('aria-pressed','false');
+  moveThumb(); applyFilter();
+  const row=$('.prow[data-id="'+id+'"]');
+  if(!row) return;
+  setRow(row, true);
+  row.scrollIntoView({behavior:'smooth', block:'center'});
+  row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+}));
+
+/* ---------------- 待拍板 ---------------- */
+$$('.q').forEach(q=>{
+  $('.btn',q).addEventListener('click',()=>{
+    if(q.classList.contains('done')) return;
+    q.classList.add('done');
+    $('.st',q).textContent='已定';
+    $('.btn',q).style.display='none';
+    const n=$$('.q.done').length;
+    $('#decCount').textContent='已定 '+n+' / 5';
+    if(n===5){
+      const st=$('#planSt');
+      st.textContent='已拍板';
+      st.classList.remove('warn'); st.classList.add('ok');
+    }
+    toast('Q'+q.dataset.q+' 已拍板', $('.adv',q).textContent.replace('建议 · ',''), 'final');
+  });
+});
+
+/* ---------------- 方案文档 ---------------- */
+$('#btnDoc').addEventListener('click',()=>{
+  toast('方案文档','docs/INTEGRATION-novel-booksource-engine.md · 433 行','ok');
+});
+
+/* ---------------- 启动 ---------------- */
+goView('plan');
+moveThumb();
+applyFilter();
+window.addEventListener('resize', ()=>{ goView('plan'); moveThumb(); });
+</script>
+</body>
+</html>

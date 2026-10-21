@@ -1,0 +1,520 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  /* GachaBench 语义层 */
+  --color-void: var(--gb-void);
+  --color-panel: var(--gb-panel);
+  --color-cell: var(--gb-cell);
+  --color-hi: var(--gb-hi);
+  --color-rule: var(--gb-rule);
+  --color-rule-soft: var(--gb-rule-soft);
+  --color-ash: var(--gb-ash);
+  --color-ash-dim: var(--gb-ash-dim);
+  --color-paper: var(--gb-paper);
+  --color-wash: var(--gb-wash);
+  --color-wash-line: var(--gb-wash-line);
+  --color-ok: var(--gb-ok);
+  --color-ok-wash: var(--gb-ok-wash);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-cell: 4px;
+  --radius-ctl: 6px;
+  --radius-panel: 10px;
+}
+
+/* ============================================================
+   无彩度 · 金属灰
+   底色 #171717 / #262626，UI 完全去色 ——
+   屏幕上唯一的彩色是画面本身。状态只靠形状 + 明度：
+   正片 实心亮条 ／ 废稿 斜纹 + 虚线轮廓 ／ 草稿 点线。
+   全套色值零色偏（R=G=B），不给审片带色偏。
+   ============================================================ */
+:root,
+.dark {
+  --gb-void: #171717;
+  --gb-panel: #1e1e1e;
+  --gb-cell: #262626;
+  --gb-hi: #303030;
+  --gb-rule: #3c3c3c;
+  --gb-rule-soft: #2b2b2b;
+  --gb-ash: #a6a6a6;
+  --gb-ash-dim: #8e8e8e;
+  --gb-paper: #ededed;
+  --gb-wash: rgba(237, 237, 237, 0.1);
+  --gb-wash-line: rgba(237, 237, 237, 0.4);
+  --gb-hatch: repeating-linear-gradient(135deg, #e8e8e8 0 4px, #5c5c5c 4px 8px);
+  --gb-dotted: repeating-linear-gradient(180deg, #8a8a8a 0 2px, transparent 2px 5px);
+  --gb-dashbar: repeating-linear-gradient(180deg, #ededed 0 4px, transparent 4px 8px);
+  --gb-ease: cubic-bezier(0.2, 0.8, 0.25, 1);
+
+  /* 🔴 全站唯一的状态色（用户特批，仅侧栏健康点）：
+     连接成功 = 绿；未连接 = 灰白 #c6c6c6。别处不许引。 */
+  --gb-ok: #3fb950;
+  --gb-ok-wash: rgba(63, 185, 80, 0.22);
+
+  /* shadcn 映射 */
+  --background: var(--gb-void);
+  --foreground: var(--gb-paper);
+  --card: var(--gb-panel);
+  --card-foreground: var(--gb-paper);
+  --popover: var(--gb-cell);
+  --popover-foreground: var(--gb-paper);
+  --primary: var(--gb-paper);
+  --primary-foreground: #131313;
+  --secondary: var(--gb-cell);
+  --secondary-foreground: var(--gb-paper);
+  --muted: var(--gb-cell);
+  --muted-foreground: var(--gb-ash);
+  --accent: var(--gb-hi);
+  --accent-foreground: var(--gb-paper);
+  --destructive: #a8a8a8;
+  --destructive-foreground: #131313;
+  --border: var(--gb-rule-soft);
+  --input: var(--gb-cell);
+  --ring: var(--gb-wash-line);
+  --chart-1: #ededed;
+  --chart-2: #a6a6a6;
+  --chart-3: #8e8e8e;
+  --chart-4: #5c5c5c;
+  --chart-5: #3c3c3c;
+  --radius: 6px;
+  --sidebar: var(--gb-panel);
+  --sidebar-foreground: var(--gb-paper);
+  --sidebar-primary: var(--gb-paper);
+  --sidebar-primary-foreground: #131313;
+  --sidebar-accent: var(--gb-hi);
+  --sidebar-accent-foreground: var(--gb-paper);
+  --sidebar-border: var(--gb-rule-soft);
+  --sidebar-ring: var(--gb-wash-line);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    @apply font-sans;
+  }
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--gb-paper);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  ::selection {
+    background: rgba(237, 237, 237, 0.26);
+    color: var(--gb-paper);
+  }
+}
+
+/* 滚动条：与暗室一致，不要系统亮条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gb-rule) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--gb-rule);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+/* ============================================================
+   胶片格：状态胶条靠形状与明度，不靠颜色
+   ============================================================ */
+.gb-tab {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  z-index: 2;
+  transition: width 90ms var(--gb-ease);
+}
+.gb-tab[data-s='final'] {
+  background: #ffffff;
+}
+.gb-tab[data-s='reject'] {
+  background: var(--gb-hatch);
+}
+.gb-tab[data-s='draft'] {
+  background: var(--gb-dotted);
+}
+.gb-cell:hover .gb-tab,
+.gb-cell:focus-visible .gb-tab {
+  width: 7px;
+}
+
+/* 画面压暗：让烧在画面上的时间码读得出来 */
+.gb-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.26),
+    transparent 30%,
+    transparent 64%,
+    rgba(0, 0, 0, 0.5)
+  );
+}
+
+/* 浮层徽标（贴在图/帧上）：实线 = 已确认，虚线 = 未完成。
+   ⚠️ 这是 position:absolute 的贴片，必须① 配 left/top 之类的定位类，② 放在 relative 容器里。
+   要在文字流里当标签用 → 用下面的 .gb-chip（否则会脱离文档流、且滚动时不跟着动）。 */
+.gb-pill {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(6, 6, 6, 0.78);
+  color: #c9c9c9;
+  z-index: 2;
+}
+.gb-pill[data-on='1'] {
+  color: #ededed;
+  border: 1px solid rgba(237, 237, 237, 0.55);
+}
+.gb-pill[data-on='0'] {
+  color: #8e8e8e;
+  border: 1px dashed rgba(150, 150, 150, 0.5);
+}
+
+/* 内联状态章：在文字流里，占宽度，跟着容器一起滚。
+   实线 = 进行中/已确认，虚线 = 未完成/终态 */
+.gb-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  border-radius: 3px;
+  padding: 1px 5px;
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.gb-chip[data-on='1'] {
+  border-style: solid;
+  border-color: #9a9a9a;
+  color: var(--gb-paper);
+}
+.gb-chip[data-on='0'] {
+  border-style: dashed;
+  border-color: #8a8a8a;
+  color: var(--gb-ash);
+}
+
+/* 归类落章 */
+.gb-stamp b {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 4px;
+  animation: gb-stamp-in 420ms var(--gb-ease) both;
+}
+.gb-stamp[data-s='final'] b {
+  color: #131313;
+  background: #ffffff;
+}
+.gb-stamp[data-s='reject'] b {
+  color: #dcdcdc;
+  border: 1.5px dashed #9a9a9a;
+  background: rgba(12, 12, 12, 0.78);
+}
+.gb-stamp[data-s='draft'] b {
+  color: #b4b4b4;
+  border: 1.5px solid #6e6e6e;
+  background: rgba(12, 12, 12, 0.78);
+}
+@keyframes gb-stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.55) rotate(-5deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+}
+
+/* 扫描中：底边扫光 */
+.gb-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.gb-sweep::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 38%;
+  background: #ffffff;
+  animation: gb-sweep 1.05s var(--gb-ease) infinite;
+}
+@keyframes gb-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* 时间码滑杆 */
+input[type='range'].gb-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range'].gb-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ededed var(--p, 0%), #3e3e3e var(--p, 0%));
+}
+input[type='range'].gb-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 0 0 3px rgba(237, 237, 237, 0.3);
+}
+input[type='range'].gb-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #3e3e3e;
+}
+input[type='range'].gb-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #ededed;
+}
+input[type='range'].gb-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ============================================================
+   分块带：格子的宽度由 --gb-cellw 统一供给，
+   接续轨必须与格子同宽同距，否则「这三块拼回 15s」读不出来
+   ============================================================ */
+:root,
+.dark {
+  --gb-cellw: 264px;
+  --gb-cellgap: 12px;
+}
+
+.gb-strip-cells {
+  display: flex;
+  gap: var(--gb-cellgap);
+  padding: 14px;
+  overflow-x: auto;
+}
+.gb-strip-cells > * {
+  flex: 0 0 var(--gb-cellw);
+  min-width: 0;
+}
+
+.gb-rail {
+  display: flex;
+  align-items: center;
+  padding: 0 14px 14px;
+  overflow-x: auto;
+}
+.gb-rail .gb-seg {
+  flex: 0 0 var(--gb-cellw);
+  height: 3px;
+  border-radius: 2px;
+  background: #3e3e3e;
+  margin-right: var(--gb-cellgap);
+  position: relative;
+  overflow: hidden;
+}
+.gb-rail .gb-seg[data-has='0'] {
+  background: transparent;
+  border-top: 1px dashed #4a4a4a;
+  height: 0;
+}
+.gb-rail .gb-seg i {
+  position: absolute;
+  inset: 0;
+  background: #cfcfd4;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 90ms var(--gb-ease);
+}
+.gb-rail[data-full='1'] .gb-seg i {
+  transform: scaleX(1);
+}
+.gb-rail[data-focus='1'] .gb-seg i {
+  transform: scaleX(1);
+  background: #ffffff;
+}
+.gb-rail .gb-sum {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--gb-ash);
+  white-space: nowrap;
+}
+
+/* 拆分台的镜序↔切分对照条 */
+.gb-tlrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.gb-tlbar {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 2px;
+  height: 28px;
+  min-width: 0;
+}
+.gb-shot {
+  position: relative;
+  border-radius: 3px;
+  background: var(--gb-hi);
+  border: 1px solid var(--gb-rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--gb-ash);
+  overflow: hidden;
+  min-width: 0;
+  transition: color 90ms linear, background 90ms linear;
+}
+.gb-shot[data-cut='1'] {
+  border-right: 2px solid #ffffff;
+}
+.gb-shot[data-dim='1'] {
+  color: var(--gb-ash-dim);
+}
+.gb-blk {
+  position: relative;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow: hidden;
+  min-width: 0;
+  transition: filter 90ms linear;
+}
+.gb-blk[data-k='jia'] {
+  background: var(--gb-wash);
+  border: 1px solid var(--gb-wash-line);
+  color: var(--gb-paper);
+}
+.gb-blk[data-k='yi'] {
+  background: rgba(237, 237, 237, 0.05);
+  border: 1px solid var(--gb-rule);
+  color: var(--gb-ash);
+}
+.gb-blk[data-k='over'] {
+  background: rgba(237, 237, 237, 0.06);
+  border: 1px dashed #8a8a8a;
+  color: #c9c9c9;
+}
+.gb-blk[data-dim='1'] {
+  filter: brightness(0.68);
+}
+
+@media (max-width: 980px) {
+  :root,
+  .dark {
+    --gb-cellw: 184px;
+    --gb-cellgap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

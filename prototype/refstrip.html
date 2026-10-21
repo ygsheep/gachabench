@@ -1,0 +1,190 @@
+<!doctype html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>参考条 · 视觉复核</title>
+<!-- 字体跟线上同源；CSS 用真实构建产物，保证配色/字阶/圆角一致 -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../web/dist/assets/index-U7h9oUiL.css">
+<style>
+  html, body { margin: 0; background: var(--gb-void); }
+  .stage { max-width: 1140px; margin: 0 auto; padding: 26px 24px 40px; }
+  .cap { margin: 26px 0 9px; font-size: 11.5px; color: var(--gb-ash-dim); }
+  .shot { position: relative; height: 560px; overflow: hidden; border-radius: 10px;
+          border: 1px solid var(--gb-rule-soft); background: var(--gb-void); }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <p class="cap">① 跑片行 + 参考条（4 图 / 2 音，三种状态各一例）</p>
+
+  <div class="flex flex-wrap items-center gap-2.5 rounded-ctl border border-rule-soft bg-cell px-3 py-2">
+    <span class="size-[5px] flex-none rounded-full bg-ash-dim"></span>
+    <span class="font-mono text-[11.5px] text-[#c6c6c6]">1of3</span>
+    <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ash-dim">提示词/拆分/17_第17段/17_第17段_1of3.txt</span>
+    <span class="font-mono text-[11px] text-ash">SH1701 SH1702</span>
+    <span class="font-mono text-[11px] text-ash">5.0s</span>
+    <button class="h-7 rounded-ctl border border-rule bg-panel px-2.5 text-[12px]">跑这块</button>
+
+    <div class="mt-2.5 w-full">
+      <div class="mb-2 flex flex-wrap items-center gap-2">
+        <span class="text-[11.5px] text-ash">参考</span>
+        <span class="font-mono text-[11px] text-ash-dim">4 图 · 2 音</span>
+        <span class="gb-chip" data-on="0">2 项自动送入</span>
+        <span class="gb-chip" data-on="1" title="跑片时接到 <Audio N> 对应的 ref_audio 槽">2 段音频接入工作流</span>
+        <span class="gb-chip" data-on="0">1 项待补</span>
+        <span class="flex-1"></span>
+        <button class="inline-flex h-7 items-center rounded-ctl border border-rule bg-panel px-2.5 text-[11.5px] text-ash">现在送入 2 项</button>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+
+        <!-- P1 已就位（input 目录里有） -->
+        <button class="w-[126px] flex-none overflow-hidden rounded-cell border border-rule bg-cell p-1 text-left">
+          <span class="relative block aspect-[4/3] overflow-hidden rounded-[3px] bg-black">
+            <img src="http://127.0.0.1:8000/api/assets/file/%E4%BD%95%E8%81%AA_%E5%86%99%E5%AE%9E_%E5%9B%9B%E8%A7%86%E5%9B%BE.png" alt="" class="h-full w-full object-cover">
+            <span class="gb-pill left-1.5 top-1.5" data-on="1">P1</span>
+          </span>
+          <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">何聪_写实_四视图.png</span>
+          <span class="block font-mono text-[10px] text-ash-dim">已就位</span>
+        </button>
+
+        <!-- P2 资产库近似命中（库里只有同名 .jpg） -->
+        <button class="w-[126px] flex-none overflow-hidden rounded-cell border border-dashed border-[#6e6e6e] bg-cell p-1 text-left">
+          <span class="relative block aspect-[4/3] overflow-hidden rounded-[3px] bg-black">
+            <img src="http://127.0.0.1:8000/api/assets/file/%E4%BD%95%E8%81%AA_%E5%9B%BD%E6%BC%AB3D_%E5%9B%9B%E8%A7%86%E5%9B%BE.png" alt="" class="h-full w-full object-cover">
+            <span class="gb-pill left-1.5 top-1.5" data-on="0">P2</span>
+            <span class="gb-pill bottom-1.5 left-1.5" data-on="0">自动</span>
+          </span>
+          <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">客厅_实拍_视角1.png</span>
+          <span class="block font-mono text-[10px] text-ash-dim">库内近似</span>
+        </button>
+
+        <!-- P3 资产库精确命中 -->
+        <button class="w-[126px] flex-none overflow-hidden rounded-cell border border-dashed border-[#6e6e6e] bg-cell p-1 text-left">
+          <span class="relative block aspect-[4/3] overflow-hidden rounded-[3px] bg-black">
+            <img src="http://127.0.0.1:8000/api/assets/file/%E4%BD%95%E8%81%AA_%E5%9B%BD%E6%BC%AB3D_%E8%BF%91%E6%99%AF.png" alt="" class="h-full w-full object-cover">
+            <span class="gb-pill left-1.5 top-1.5" data-on="0">P3</span>
+            <span class="gb-pill bottom-1.5 left-1.5" data-on="0">自动</span>
+          </span>
+          <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">客厅_实拍_视角2.png</span>
+          <span class="block font-mono text-[10px] text-ash-dim">库内可补齐</span>
+        </button>
+
+        <!-- P4 两边都没有 -->
+        <button class="w-[126px] flex-none overflow-hidden rounded-cell border border-dashed border-[#6e6e6e] bg-cell p-1 text-left">
+          <span class="relative block aspect-[4/3] overflow-hidden rounded-[3px] bg-black">
+            <span class="grid h-full w-full place-items-center text-ash-dim">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-4"><path d="M3 3l18 18"/><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.4"/><path d="M5 19l5-5 3 3"/></svg>
+            </span>
+            <span class="gb-pill left-1.5 top-1.5" data-on="0">P4</span>
+            <span class="gb-pill bottom-1.5 left-1.5" data-on="0">缺图</span>
+          </span>
+          <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">根本没有这张.png</span>
+          <span class="block font-mono text-[10px] text-ash">两边都没有</span>
+        </button>
+
+        <!-- A1 播放中：点亮的是已播部分 -->
+        <div class="flex w-[244px] flex-none flex-col rounded-cell border border-dashed border-[#6e6e6e] bg-cell p-2">
+          <div class="flex items-center gap-2">
+            <button class="grid size-7 flex-none place-items-center rounded-ctl border border-rule bg-panel text-ash">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="size-3"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+            </button>
+            <span class="gb-chip" data-on="0">A1</span>
+            <span class="min-w-0 flex-1 truncate text-left font-mono text-[10.5px] text-ash">白兴学_配音.mp3</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-3.5 flex-none text-ash-dim"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+          </div>
+          <div class="my-auto h-[18px] w-full cursor-pointer rounded-[1px]" style="background-image:repeating-linear-gradient(90deg,var(--gb-paper) 0 2px,transparent 2px 5px),repeating-linear-gradient(90deg,var(--gb-rule) 0 2px,transparent 2px 5px);background-size:38% 100%,100% 100%;background-repeat:no-repeat,no-repeat"></div>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-ash-dim">0:03 / 0:08</span>
+            <span class="flex-1"></span>
+            <span class="font-mono text-[10px] text-ash-dim" title="跑片时这一条接到的节点槽位">ref_audio_0</span>
+            <span class="font-mono text-[10px] text-ash-dim">库内可补齐</span>
+          </div>
+        </div>
+
+        <!-- A2 已就位 -->
+        <div class="flex w-[244px] flex-none flex-col rounded-cell border border-rule bg-cell p-2">
+          <div class="flex items-center gap-2">
+            <button class="grid size-7 flex-none place-items-center rounded-ctl border border-rule bg-panel text-ash">
+              <svg viewBox="0 0 24 24" fill="currentColor" class="size-3"><path d="M8 5l11 7-11 7z"/></svg>
+            </button>
+            <span class="gb-chip" data-on="1">A2</span>
+            <span class="min-w-0 flex-1 truncate text-left font-mono text-[10.5px] text-ash">白陌_配音.mp3</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-3.5 flex-none text-ash-dim"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+          </div>
+          <div class="my-auto h-[18px] w-full cursor-pointer rounded-[1px]" style="background-image:repeating-linear-gradient(90deg,var(--gb-paper) 0 2px,transparent 2px 5px),repeating-linear-gradient(90deg,var(--gb-rule) 0 2px,transparent 2px 5px);background-size:0% 100%,100% 100%;background-repeat:no-repeat,no-repeat"></div>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[10px] text-ash-dim">—</span>
+            <span class="flex-1"></span>
+            <span class="font-mono text-[10px] text-ash-dim" title="跑片时这一条接到的节点槽位">ref_audio_1</span>
+            <span class="font-mono text-[10px] text-ash-dim">已就位</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 选择器（真实组件是 fixed 全屏，这里为了同屏展示改成绝对定位，其余一致） -->
+<div class="stage">
+  <p class="cap">② 点格子后的「换一张 / 换一段」选择器</p>
+  <div class="shot">
+    <div class="absolute inset-0 grid place-items-center bg-black/70 p-6">
+      <div class="flex max-h-[430px] w-[min(760px,94vw)] flex-col rounded-panel border border-rule bg-panel shadow-2xl shadow-black/60">
+        <div class="flex flex-wrap items-center gap-2.5 border-b border-rule-soft px-4 py-3">
+          <h3 class="text-[13.5px] font-medium">为 P2 换一张</h3>
+          <span class="min-w-0 truncate font-mono text-[11px] text-ash-dim">目标名 客厅_实拍_视角1.png</span>
+          <span class="flex-1"></span>
+          <button class="grid size-7 place-items-center rounded-ctl border border-rule bg-cell text-ash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-3.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5 px-4 py-2.5">
+          <div class="relative w-[240px]">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="pointer-events-none absolute left-2.5 top-2 size-3.5 text-ash-dim"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input placeholder="主体名 / 文件名" class="h-8 w-full rounded-ctl border border-rule bg-cell pl-7 pr-2.5 text-[12.5px] outline-none placeholder:text-ash-dim">
+          </div>
+          <span class="font-mono text-[11px] text-ash-dim">12 项</span>
+        </div>
+        <div class="min-h-0 flex-1 overflow-hidden px-4 pb-2">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2.5">
+            <button class="overflow-hidden rounded-cell border border-rule-soft bg-cell p-1 text-left">
+              <span class="block aspect-[4/3] overflow-hidden rounded-[3px] bg-black"><img src="http://127.0.0.1:8000/api/assets/file/%E5%88%98%E5%BC%BA%20Q%E7%89%88.png" alt="" class="h-full w-full object-cover"></span>
+              <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">刘强 Q版.png</span>
+              <span class="block truncate text-[10px] text-ash-dim">刘强</span>
+            </button>
+            <button class="overflow-hidden rounded-cell border border-rule-soft bg-cell p-1 text-left">
+              <span class="block aspect-[4/3] overflow-hidden rounded-[3px] bg-black"><img src="http://127.0.0.1:8000/api/assets/file/%E5%88%98%E5%BC%BA.png" alt="" class="h-full w-full object-cover"></span>
+              <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">刘强.png</span>
+              <span class="block truncate text-[10px] text-ash-dim">刘强</span>
+            </button>
+            <button class="overflow-hidden rounded-cell border border-rule-soft bg-cell p-1 text-left">
+              <span class="block aspect-[4/3] overflow-hidden rounded-[3px] bg-black"><img src="http://127.0.0.1:8000/api/assets/file/%E4%BD%95%E8%81%AA_%E5%86%99%E5%AE%9E_%E5%9B%9B%E8%A7%86%E5%9B%BE.png" alt="" class="h-full w-full object-cover"></span>
+              <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">何聪_写实_四视图.png</span>
+              <span class="block truncate text-[10px] text-ash-dim">何聪</span>
+            </button>
+            <button class="overflow-hidden rounded-cell border border-rule-soft bg-cell p-1 text-left">
+              <span class="block aspect-[4/3] overflow-hidden rounded-[3px] bg-black"><img src="http://127.0.0.1:8000/api/assets/file/%E4%BD%95%E8%81%AA_%E5%9B%BD%E6%BC%AB3D_%E8%BF%91%E6%99%AF.png" alt="" class="h-full w-full object-cover"></span>
+              <span class="mt-1 block truncate font-mono text-[10.5px] text-ash">何聪_国漫3D_近景.png</span>
+              <span class="block truncate text-[10px] text-ash-dim">何聪</span>
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 border-t border-rule-soft px-4 py-2.5">
+          <p class="min-w-0 flex-1 text-[11px] leading-relaxed text-ash-dim">选中的文件会以 <span class="font-mono text-ash">客厅_实拍_视角1.png</span> 这个名字复制进 ComfyUI input 目录（同名会被覆盖），只供这一块跑片用，不写进资产库。</p>
+          <label class="inline-flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-ctl border border-rule bg-cell px-3 text-[12px] text-ash">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-3.5"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            直接上传
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "默认能力：本壳不调用任何 Tauri IPC，只留 core 默认集。",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

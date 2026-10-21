@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GachaBench</title>
+<style>
+  /* 与产品同源：无彩度 · 金属灰。壳不能有自己的设计语言。 */
+  :root {
+    --void: #171717;
+    --panel: #1e1e1e;
+    --cell: #262626;
+    --line: #3c3c3c;
+    --line-soft: #2b2b2b;
+    --ash: #9a9a9a;
+    --paper: #f2f2f2;
+    --rail: #cfcfd4;
+    --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+    --sans: "IBM Plex Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--void); color: var(--paper);
+    font-family: var(--sans);
+    -webkit-user-select: none; user-select: none;
+    overflow: hidden;
+  }
+  main {
+    height: 100%;
+    display: grid; place-items: center;
+  }
+  .wrap { width: 320px; text-align: center; }
+
+  .mark {
+    display: flex; justify-content: center; gap: 6px;
+    margin-bottom: 22px;
+  }
+  .mark i {
+    display: block; width: 26px; border-radius: 2px;
+    background: var(--line);
+  }
+  .mark i:nth-child(1) { height: 14px; }
+  .mark i:nth-child(2) { height: 20px; background: var(--rail); }
+  .mark i:nth-child(3) { height: 14px; }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: 15px; font-weight: 500; letter-spacing: .14em;
+  }
+  .sub {
+    margin: 0 0 26px;
+    font-size: 12px; color: var(--ash);
+  }
+
+  /* 接续轨： indeterminacy 用明度推移表达，无彩度系统里没有别的可用 */
+  .rail {
+    position: relative; height: 2px;
+    background: var(--line-soft);
+    border-radius: 1px; overflow: hidden;
+  }
+  .rail::after {
+    content: ""; position: absolute; inset: 0 auto 0 0;
+    width: 40%; background: var(--rail);
+    animation: slide 1.15s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+
+  .status {
+    margin-top: 14px;
+    font-family: var(--mono); font-size: 11px; color: var(--ash);
+    min-height: 16px;
+  }
+
+  .fail { display: none; }
+  .fail .box {
+    margin-top: 22px; padding: 14px;
+    background: var(--panel);
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    text-align: left;
+  }
+  .fail h2 { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+  .fail p { margin: 0 0 6px; font-size: 12px; color: var(--ash); line-height: 1.6; }
+  .fail code {
+    font-family: var(--mono); font-size: 11px; color: var(--paper);
+    word-break: break-all;
+  }
+  body.failed .boot { display: none; }
+  body.failed .fail { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <div class="wrap">
+    <div class="boot">
+      <div class="mark"><i></i><i></i><i></i></div>
+      <h1>GACHABENCH</h1>
+      <p class="sub">ComfyUI 视频抽卡工作台</p>
+      <div class="rail"></div>
+      <div class="status" id="status">正在启动后端…</div>
+    </div>
+
+    <div class="fail">
+      <div class="box">
+        <h2>后端没有在 90 秒内就绪</h2>
+        <p>日志在这里：</p>
+        <p><code>%LOCALAPPDATA%\GachaBench\logs\backend.log</code></p>
+        <p><code>%LOCALAPPDATA%\GachaBench\logs\shell.log</code></p>
+        <p>关掉窗口重开一次通常就好了；反复失败就把日志发出来。</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // 壳在 Rust 侧探活，这里只负责文案和失败态，不碰 Tauri IPC。
+  var t0 = Date.now();
+  var el = document.getElementById("status");
+  var tick = setInterval(function () {
+    var s = ((Date.now() - t0) / 1000).toFixed(0);
+    el.textContent = "正在启动后端… " + s + "s";
+  }, 500);
+
+  if (location.search.indexOf("failed=1") !== -1) {
+    document.body.classList.add("failed");
+    clearInterval(tick);
+  }
+</script>
+</body>
+</html>

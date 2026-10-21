@@ -1,0 +1,12 @@
+{
+  "name": "gachabench-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "GachaBench 桌面壳（Tauri v2）——只装 CLI，构建逻辑在 packaging/build.py",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.6"
+  }
+}

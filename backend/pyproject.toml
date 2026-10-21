@@ -1,0 +1,14 @@
+[project]
+name = "gachabench-backend"
+version = "0.1.0"
+description = "GachaBench backend — 通用 ComfyUI 视频抽卡工作台"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.2",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.0",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.54.0",
+]

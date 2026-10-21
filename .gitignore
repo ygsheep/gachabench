@@ -147,3 +147,38 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# ================= GachaBench =================
+# 上面是 GitHub 的 Node 模板，下面是本项目自己的规则
+
+# Python 后端
+__pycache__/
+*.py[cod]
+.venv/
+# 本机配置（ComfyUI 路径、工作区绝对路径）：首次启动会自动生成默认值
+backend/config.json
+*.db
+*.db-journal
+*.db-wal
+
+# PyInstaller 打包中间物（几百 MB），以及 build.py 拉下来的本地工具链
+build/
+packaging/.pytools/
+
+# 桌面壳：target 是 Rust 构建缓存，backend 是 PyInstaller sidecar（约 500 MB）
+desktop/src-tauri/target/
+desktop/src-tauri/backend/
+desktop/src-tauri/gen/
+desktop/node_modules/
+
+# 工作区索引与本地数据
+.gachabench/
+
+# AI 会话记忆（含本机路径，不随仓库走）
+.workbuddy/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+*.local
+

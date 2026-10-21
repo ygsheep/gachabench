@@ -1,0 +1,37 @@
+[package]
+name = "gachabench"
+version = "0.1.0"
+description = "GachaBench 桌面壳 —— 拉起 Python 后端并承载窗口"
+edition = "2021"
+rust-version = "1.77"
+
+# 这个 crate 只是个壳：没有 lib，只有一个 bin。
+# 真正的业务全在 Python 后端里（见 desktop/README.md 的架构说明）。
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 只为在启动时记一笔 webview 运行时的探测结果（shell_log）。
+# 版本与 tauri-runtime-wry 内部用的保持一字不差，否则会多编一份。
+wry = "=0.57.0"
+
+# Windows Job Object：壳进程无论如何死掉，sidecar 连带 ffmpeg 都必须跟着走。
+# 版本与依赖树里已有的一致，加上不会多编一份。
+# ⚠️ JOBOBJECT_* 结构体实际挂在 Win32_System_Threading 下面，
+# CreateJobObjectW 又因为参数带 SECURITY_ATTRIBUTES 而挂在 Win32_Security 下面。
+# 三个都得开，少一个就是「unresolved import」。
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Security",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+strip = true          # 去掉符号表，产物小一截
+opt-level = "s"       # 壳不需要极致速度，体积优先
