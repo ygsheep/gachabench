@@ -532,7 +532,13 @@ export interface SearchSource {
   unsupported: string
 }
 
-/** POST /api/search —— 一条命中 */
+/** POST /api/search —— 多源聚合后的一个候选源定位 */
+export interface SearchCandidate {
+  source: string
+  bookUrl: string
+}
+
+/** POST /api/search —— 一条命中（可能是多源聚合后的） */
 export interface SearchHit {
   name: string
   author: string
@@ -540,12 +546,38 @@ export interface SearchHit {
   cover: string
   intro: string
   lastChapter: string
+  kind?: string
+  wordCount?: string
+  /** 这本书在哪些源里找到：多个源 = 可以换源取目录/正文 */
+  candidates?: SearchCandidate[]
+  sources?: string[]
+}
+
+/**
+ * 一次搜索的书源账本。
+ *
+ * 没有它，「为什么只有 3 个源有结果」永远说不清是超时放弃、请求失败，
+ * 还是源站本身没收录 —— 用户会以为是软件坏了。
+ */
+export interface SearchStats {
+  requested: number
+  returned: number
+  ok: number
+  empty: number
+  failed: number
+  abandoned: number
+  hit: number
+  elapsed: number
+  workers: number
 }
 
 export interface SearchResp {
   keyword: string
   source: string
+  /** "all" = 全网多源并行；"single" = 指定书源 */
+  mode: "all" | "single"
   books: SearchHit[]
+  stats?: SearchStats
 }
 
 /** POST /api/search/toc */

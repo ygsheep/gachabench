@@ -31,10 +31,13 @@ import gzip
 import http.cookiejar
 import json
 import re
+import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
@@ -1720,3 +1723,168 @@ def fetch_chapter(src: Source, url: str, *, cfg=None) -> dict:
     """取正文 → {title, text}。"""
     title, text = _engine(src, cfg).content(url)
     return {"title": title, "text": text}
+
+
+# ---------------------------------------------------------------- 多源聚合
+
+
+@dataclass
+class SearchStats:
+    """一次全网搜索的书源账本：让用户看得见「哪些源没参与结果」。
+
+    这段照搬原实现（aggregator.SearchStats）—— 没有它，「别的 App 有 12 个源、
+    这里只有 3 个」这类差异根本说不清是超时放弃、请求失败还是源站没收录。
+    """
+
+    requested: int = 0  # 本次投入的书源数
+    returned: int = 0  # 截止时间前返回结果的源数（ok + empty）
+    ok: int = 0  # 有结果的源
+    empty: int = 0  # 返回成功但 0 条（改版/反爬/关键词无收录）
+    failed: int = 0  # 请求异常（403/404/502/连不上…）
+    abandoned: int = 0  # 超时未返回，被放弃
+    hit: int = 0  # 最终有候选进入结果的源数
+    elapsed: float = 0.0
+    workers: int = 0
+
+    def to_dict(self) -> dict:
+        return {
+            "requested": self.requested,
+            "returned": self.returned,
+            "ok": self.ok,
+            "empty": self.empty,
+            "failed": self.failed,
+            "abandoned": self.abandoned,
+            "hit": self.hit,
+            "elapsed": round(self.elapsed, 1),
+            "workers": self.workers,
+        }
+
+
+#: 单源没有独立超时控制，靠「整体截止时间 + 并发」保证返回。
+DEFAULT_SEARCH_TIMEOUT = 40.0
+DEFAULT_SEARCH_WORKERS = 12
+
+
+def _norm_key(s: str) -> str:
+    """书名/作者归一化：NFKC 全半角统一 + 去空白 + 小写（用于跨源去重）。"""
+    s = unicodedata.normalize("NFKC", str(s or ""))
+    return re.sub(r"\s+", "", s).lower()
+
+
+def _detail(e: Exception) -> str:
+    """异常的可读摘要：类型 + 首行（书源报错常带整段堆栈，截断到 120 字）。"""
+    msg = str(e).strip().splitlines()
+    return (f"{type(e).__name__}: {msg[0]}")[:120] if msg else type(e).__name__
+
+
+def search_all(
+    sources: list[Source],
+    keyword: str,
+    page: int = 1,
+    *,
+    cfg=None,
+    timeout: float = 0.0,
+    max_workers: int = 0,
+    names: list[str] | None = None,
+    strict: bool = False,
+) -> tuple[list[dict], SearchStats]:
+    """并发搜索多个源，按（书名, 作者）聚合去重，返回 (书籍列表, 账本)。
+
+    - 每个源一个独立 Engine（cookie jar 必须按源隔离），不同源在不同线程并行；
+    - 到点未完成的源直接放弃，不拖住整体响应（慢源由 urllib 自己的超时收尾）；
+    - `strict=True` 只保留书名或作者命中关键词的结果 —— 搜索页混进来的推荐位/广告
+      会在这里被滤掉，代价是可能漏掉「别名命中」的书；
+    - 元数据取**配置顺序里首个命中的源**，候选源按同序排列（与原实现一致）。
+
+    单个源失败绝不整单失败：失败计入账本，其余源照出结果。
+    """
+    started = time.time()
+    cands = [s for s in sources if not s.unsupported and s.can_search]
+    if names:
+        allow = {n for n in names if isinstance(n, str)}
+        cands = [s for s in cands if s.name in allow]
+    if not cands:
+        raise UnsupportedRule("没有可用的书源可搜（都被标成了不支持，或清单为空）")
+
+    workers = max_workers if isinstance(max_workers, int) and max_workers > 0 else DEFAULT_SEARCH_WORKERS
+    workers = min(workers, len(cands))
+    deadline = timeout if isinstance(timeout, (int, float)) and timeout > 0 else DEFAULT_SEARCH_TIMEOUT
+
+    def _one(src: Source) -> list[dict]:
+        return _engine(src, cfg).search(keyword, page)
+
+    results: dict[int, list[dict]] = {}
+    ok = empty = failed = 0
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        futures = {pool.submit(_one, s): i for i, s in enumerate(cands)}
+        done, pending = wait(futures, timeout=deadline)
+        for fut in done:
+            i = futures[fut]
+            try:
+                books = fut.result()
+            except Exception:  # noqa: BLE001 —— 单源失败不该冒泡成整单失败
+                results[i] = []
+                failed += 1
+                continue
+            results[i] = books
+            if books:
+                ok += 1
+            else:
+                empty += 1
+        for fut in pending:
+            fut.cancel()
+    finally:
+        # 不等在途请求：慢源交给 urllib 自己的 timeout 收尾
+        pool.shutdown(wait=False)
+
+    merged = _merge_results(cands, results)
+    if strict:
+        kw = _norm_key(keyword)
+        merged = [
+            b for b in merged
+            if kw in _norm_key(b.get("name", "")) or (b.get("author") and kw in _norm_key(b["author"]))
+        ]
+    hit = {c["source"] for b in merged for c in b["candidates"]}
+    stats = SearchStats(
+        requested=len(cands),
+        returned=ok + empty,
+        ok=ok,
+        empty=empty,
+        failed=failed,
+        abandoned=len(cands) - (ok + empty + failed),
+        hit=len(hit),
+        elapsed=time.time() - started,
+        workers=workers,
+    )
+    return merged, stats
+
+
+def _merge_results(sources: list[Source], results: dict[int, list[dict]]) -> list[dict]:
+    """按书源配置顺序合并：同书归并、元数据取首个命中、候选按序排列。"""
+    groups: dict[tuple[str, str], dict] = {}
+    order: list[dict] = []
+    for i, src in enumerate(sources):
+        for b in results.get(i) or []:
+            key = (_norm_key(b.get("name", "")), _norm_key(b.get("author", "")))
+            book = groups.get(key)
+            if book is None:
+                book = {
+                    "name": b.get("name", ""),
+                    "author": b.get("author", ""),
+                    "intro": b.get("intro", ""),
+                    "kind": b.get("kind", ""),
+                    "wordCount": b.get("wordCount", ""),
+                    "cover": b.get("cover", ""),
+                    "lastChapter": b.get("lastChapter", ""),
+                    # 首选源的定位，前端第一次点书时直接用它，不用猜 candidates[0]
+                    "bookUrl": b.get("bookUrl", ""),
+                    "candidates": [],
+                    "sources": [],
+                }
+                groups[key] = book
+                order.append(book)
+            book["candidates"].append({"source": src.name, "bookUrl": b.get("bookUrl", "")})
+            book["sources"].append(src.name)
+    # 候选多的排前面（更多源 = 更可能是要找的那本），同分保持配置顺序
+    return sorted(order, key=lambda b: -len(b["candidates"]))

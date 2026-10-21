@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import {
@@ -15,12 +15,17 @@ import { api } from "@/lib/api"
 import type {
   ChapterTextResp,
   CollectResp,
+  SearchCandidate,
   SearchHit,
   SearchResp,
   SearchSource,
+  SearchStats,
   SearchStatus,
   TocResp,
 } from "@/lib/types"
+
+/** 全网模式一次可能回来上百条（模糊匹配），列前这么多就够挑了。 */
+const MAX_SHOWN = 50
 
 /**
  * 小说搜索（整合方案 L3 · 联网采集）—— **真接后端**。
@@ -37,7 +42,12 @@ export function NovelSearch() {
   const qc = useQueryClient()
 
   const [keyword, setKeyword] = useState("")
+  //: 空串 = 全网多源并行（默认）；填源名 = 只搜那一个
   const [source, setSource] = useState("")
+  //: 精确模式：只留书名/作者含关键词的，滤掉搜索页的推荐位和模糊命中
+  const [strict, setStrict] = useState(true)
+  //: 当前这本书用哪个源取目录/正文 —— 全网模式下每本书可能来自不同的源
+  const [activeSource, setActiveSource] = useState("")
   const [hit, setHit] = useState<SearchHit | null>(null)
   const [from, setFrom] = useState(1)
   const [to, setTo] = useState(0)
@@ -62,11 +72,6 @@ export function NovelSearch() {
     [sourcesQ.data]
   )
 
-  // 源列表到手后默认选第一个可用的
-  useEffect(() => {
-    if (!source && sources.length) setSource(sources[0].name)
-  }, [sources, source])
-
   const enable = useMutation({
     mutationFn: () =>
       api.put("/api/config", { search: { enabled: true, disclaimer_acked: true } }),
@@ -79,18 +84,36 @@ export function NovelSearch() {
   })
 
   const search = useMutation({
-    mutationFn: () => api.post<SearchResp>("/api/search", { keyword: keyword.trim(), source }),
+    mutationFn: () =>
+      api.post<SearchResp>(
+        "/api/search",
+        { keyword: keyword.trim(), source, strict },
+        // 全网模式并发打几十个源，最坏要等到服务端的整体截止时间
+        { timeoutMs: 90_000 }
+      ),
     onSuccess: (d) => {
       setHit(null)
       setPreview(null)
-      if (!d.books.length) toast.message("没搜到", { description: "换个源或换个关键词试试" })
+      setActiveSource("")
+      toc.reset()
+      if (!d.books.length) {
+        toast.message("没搜到", {
+          description: d.mode === "all" ? "账本里能看到每个源各自的情况" : "换个源或换个关键词试试",
+        })
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   })
   const books = search.data?.books ?? []
+  //: 当前展示的这本书，在 activeSource 下的定位（换源后 bookUrl 会变）
+  const activeCandidate = useMemo(
+    () => hit?.candidates?.find((c) => c.source === activeSource) ?? hit?.candidates?.[0],
+    [hit, activeSource]
+  )
 
   const toc = useMutation({
-    mutationFn: (bookUrl: string) => api.post<TocResp>("/api/search/toc", { source, book_url: bookUrl }),
+    mutationFn: (arg: { url: string; source: string }) =>
+      api.post<TocResp>("/api/search/toc", { source: arg.source, book_url: arg.url }),
     onSuccess: (d) => {
       setPreview(null)
       setFrom(1)
@@ -101,13 +124,19 @@ export function NovelSearch() {
   })
   const chapters = toc.data?.chapters ?? []
 
+  /** 换源：同一本书在另一个源下的目录重新拉一遍（标题对不上就收不到正文） */
+  const switchSource = (c: SearchCandidate) => {
+    setActiveSource(c.source)
+    toc.mutate({ url: c.bookUrl, source: c.source })
+  }
+
   const collect = useMutation({
     mutationFn: () =>
       api.post<CollectResp>(
         "/api/search/import",
         {
-          source,
-          book_url: hit?.bookUrl ?? "",
+          source: activeSource,
+          book_url: activeCandidate?.bookUrl ?? hit?.bookUrl ?? "",
           title: hit?.name ?? "",
           author: hit?.author ?? "",
           chapter_from: from,
@@ -127,7 +156,8 @@ export function NovelSearch() {
   })
 
   const peek = useMutation({
-    mutationFn: (url: string) => api.post<ChapterTextResp>("/api/search/chapter", { source, url }),
+    mutationFn: (url: string) =>
+      api.post<ChapterTextResp>("/api/search/chapter", { source: activeSource, url }),
     onSuccess: (d) => setPreview(d),
     onError: (e: Error) => toast.error(e.message),
   })
@@ -222,10 +252,13 @@ export function NovelSearch() {
                 onChange={(e) => {
                   setSource(e.target.value)
                   setHit(null)
+                  setActiveSource("")
                   toc.reset()
                 }}
                 className="h-8 w-[15rem] rounded-ctl border border-rule bg-cell px-2 text-[12.5px] text-paper outline-none focus:border-ash-dim"
               >
+                {/* 默认全网：一次并行问所有可用源，同书按「书名+作者」合并 */}
+                <option value="">全网 · {sources.length} 个源并行</option>
                 {sources.map((s) => (
                   <option key={s.name} value={s.name}>
                     {s.name}
@@ -249,6 +282,17 @@ export function NovelSearch() {
               />
             </label>
 
+            {/* 模糊搜索会把「凡人碎空传」这类也带回来；默认只留书名/作者真的含关键词的 */}
+            <label className="flex h-8 items-center gap-1.5 text-[11.5px] text-ash-dim">
+              <input
+                type="checkbox"
+                checked={strict}
+                onChange={(e) => setStrict(e.target.checked)}
+                className="size-3.5 accent-[var(--gb-paper)]"
+              />
+              精确
+            </label>
+
             <button
               type="button"
               disabled={!keyword.trim() || search.isPending}
@@ -265,44 +309,81 @@ export function NovelSearch() {
           )}
         </section>
 
-        {/* 结果 */}
-        {!!books.length && (
+        {/* 结果 + 书源账本 */}
+        {!!search.data && (
           <section className="rounded-panel border border-rule bg-panel">
-            <div className="flex items-center gap-2 border-b border-rule-soft px-3.5 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-rule-soft px-3.5 py-2.5">
               <span className="text-[12px] font-medium">结果</span>
               <span className="font-mono text-[10.5px] text-ash-dim">{books.length}</span>
+              {!!search.data.stats && (
+                <span className="ml-auto">
+                  <StatsLine s={search.data.stats} />
+                </span>
+              )}
             </div>
-            <ul className="divide-y divide-[var(--gb-rule-soft)]">
-              {books.map((b, i) => (
-                <li key={`${b.bookUrl}-${i}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHit(b)
-                      toc.mutate(b.bookUrl)
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-hi",
-                      hit?.bookUrl === b.bookUrl && "bg-hi"
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] text-paper">{b.name}</span>
-                      <span className="mt-0.5 block truncate text-[11px] text-ash-dim">
-                        {b.author}
-                        {b.lastChapter ? ` · 最新 ${b.lastChapter}` : ""}
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 flex-none text-ash-dim" strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+
+            {!!books.length && (
+              <ul className="divide-y divide-[var(--gb-rule-soft)]">
+                {books.slice(0, MAX_SHOWN).map((b, i) => {
+                  const n = b.candidates?.length ?? 1
+                  const isHit = hit?.name === b.name && hit?.author === b.author
+                  return (
+                    <li key={`${b.name}-${b.author}-${i}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 全网模式下每本书的首选源可能不同，必须跟着这本书走
+                          const c = b.candidates?.[0]
+                          const src = c?.source ?? source
+                          setHit(b)
+                          setActiveSource(src)
+                          toc.mutate({ url: c?.bookUrl ?? b.bookUrl, source: src })
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-hi",
+                          isHit && "bg-hi"
+                        )}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] text-paper">{b.name}</span>
+                          <span className="mt-0.5 block truncate text-[11px] text-ash-dim">
+                            {b.author}
+                            {b.lastChapter ? ` · 最新 ${b.lastChapter}` : ""}
+                          </span>
+                        </span>
+                        {n > 1 && (
+                          <span
+                            className="flex-none rounded-ctl border border-rule px-1.5 py-0.5 font-mono text-[10px] text-ash-dim"
+                            title={`${n} 个源都有这本：${b.sources?.join(" / ") ?? ""}`}
+                          >
+                            ×{n}
+                          </span>
+                        )}
+                        <ChevronRight className="size-4 flex-none text-ash-dim" strokeWidth={1.5} />
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+
+            {books.length > MAX_SHOWN && (
+              <p className="px-3.5 py-2 text-[11px] text-ash-dim">
+                只列前 {MAX_SHOWN} 条（共 {books.length}）—— 关键词写全一点能更快找到
+              </p>
+            )}
+
+            {!books.length && (
+              <p className="px-3.5 py-3 text-[12px] leading-relaxed text-ash">
+                没有命中。勾掉「精确」可以放宽到模糊匹配；账本里的「空 / 失败 / 放弃」
+                说明是源站不可达，还是能连上但没收录。
+              </p>
+            )}
           </section>
         )}
 
         {/* 不支持的源：说清楚为什么 */}
-        {!books.length && !!sourcesQ.data?.sources?.length && (
+        {!books.length && !search.data && !!sourcesQ.data?.sources?.length && (
           <section className="rounded-panel border border-dashed border-rule bg-panel px-3.5 py-3">
             <p className="text-[11.5px] text-ash-dim">
               共 {sourcesQ.data.sources.length} 个源，其中{" "}
@@ -329,6 +410,11 @@ export function NovelSearch() {
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-paper">
                 {hit.name}
               </span>
+              {activeSource && (
+                <span className="flex-none font-mono text-[10.5px] text-ash-dim" title="当前取目录用的源">
+                  {activeSource}
+                </span>
+              )}
               {toc.isPending && <Loader2 className="size-3.5 animate-spin text-ash-dim" />}
               {!!chapters.length && (
                 <>
@@ -368,6 +454,28 @@ export function NovelSearch() {
                 </>
               )}
             </div>
+
+            {/* 换源：同一本书换个源取目录 —— 某个源标题对不上就收不到正文 */}
+            {!!hit.candidates && hit.candidates.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-rule-soft px-3.5 py-2">
+                <span className="flex-none text-[10.5px] text-ash-dim">换源</span>
+                {hit.candidates.map((c) => (
+                  <button
+                    key={c.source}
+                    type="button"
+                    onClick={() => switchSource(c)}
+                    className={cn(
+                      "h-6 rounded-ctl border px-2 font-mono text-[10.5px] transition-colors",
+                      c.source === activeSource
+                        ? "border-paper bg-paper text-[#131313]"
+                        : "border-rule text-ash hover:border-ash-dim hover:text-paper"
+                    )}
+                  >
+                    {c.source}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {!!chapters.length && (
               <ul className="max-h-[26rem] divide-y divide-[var(--gb-rule-soft)] overflow-y-auto">
@@ -428,6 +536,19 @@ export function NovelSearch() {
       </div>
     </div>
   )
+}
+
+/** 书源账本：这次问了多少源、谁给了结果、谁掉队。数字比「没搜到」有信息量。 */
+function StatsLine({ s }: { s: SearchStats }) {
+  const parts = [
+    `投入 ${s.requested}`,
+    `有结果 ${s.ok}`,
+    s.empty ? `空 ${s.empty}` : "",
+    s.failed ? `失败 ${s.failed}` : "",
+    s.abandoned ? `放弃 ${s.abandoned}` : "",
+    `${s.elapsed}s`,
+  ].filter(Boolean)
+  return <span className="font-mono text-[10.5px] text-ash-dim">{parts.join(" · ")}</span>
 }
 
 /** 页头。right 放状态元信息，不抢标题。 */

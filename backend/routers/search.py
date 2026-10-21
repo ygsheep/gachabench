@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from booksource import (
     DEFAULT_SOURCES_PATH,
@@ -28,6 +29,7 @@ from booksource import (
     fetch_toc,
     find_source,
     load_sources,
+    search_all,
     search_books,
 )
 from config import get_config
@@ -129,8 +131,13 @@ async def list_sources():
 
 class SearchBody(BaseModel):
     keyword: str = ""
+    #: 空串 = 全网并行搜索（对齐原实现的多源聚合）；填书名源名则只搜这一个
     source: str = ""
     page: int = 1
+    #: 精确模式：只保留书名/作者命中关键词的结果，滤掉搜索页的推荐位
+    strict: bool = False
+    #: 整体截止时间（秒），0 = 用默认值
+    timeout_sec: float = 0
 
 
 class TocBody(BaseModel):
@@ -143,20 +150,70 @@ class ChapterBody(BaseModel):
     url: str = ""
 
 
+def _single_stats(found: bool) -> dict:
+    """单源模式也回一份账本，前端不用为两种模式写两套渲染。"""
+    return {
+        "requested": 1, "returned": 1, "ok": 1 if found else 0,
+        "empty": 0 if found else 1, "failed": 0, "abandoned": 0,
+        "hit": 1 if found else 0, "elapsed": 0.0, "workers": 1,
+    }
+
+
 @router.post("")
 async def search(body: SearchBody):
+    """搜书名。`source` 为空 = 全网多源并行，返回聚合结果 + 书源账本。
+
+    🔴 耗时是秒级的（几十个源并发，最坏到整体截止时间），必须扔线程池 ——
+    直接在事件循环里跑阻塞请求会把整个后端的健康检查、任务轮询一起卡住。
+    """
     cfg = _gate()
     kw = (body.keyword or "").strip()
     if not kw:
         raise HTTPException(status_code=400, detail="关键词不能为空")
-    src = _pick(cfg, body.source)
+    sources, errors, _ = _sources(cfg)
+    if errors:
+        raise HTTPException(status_code=400, detail="；".join(errors))
+
+    # -- 单源：明确指定了就只用它，不静默回退到别的源 --
+    if body.source:
+        src = find_source(sources, body.source)
+        if src is None:
+            raise HTTPException(status_code=404, detail=f"找不到书源：{body.source}")
+        try:
+            books = await run_in_threadpool(
+                search_books, src, kw, max(1, body.page), cfg=cfg.search
+            )
+        except (UnsupportedRule, FetchError) as e:
+            raise _fail(e) from e
+        except Exception as e:  # noqa: BLE001
+            raise _fail(e) from e
+        for b in books:
+            b["candidates"] = [{"source": src.name, "bookUrl": b.get("bookUrl", "")}]
+            b["sources"] = [src.name]
+        return {
+            "keyword": kw,
+            "source": src.name,
+            "mode": "single",
+            "books": books,
+            "stats": _single_stats(bool(books)),
+        }
+
+    # -- 全网：并发 + 去重 + 账本 --
     try:
-        books = search_books(src, kw, max(1, body.page), cfg=cfg.search)
+        books, stats = await run_in_threadpool(
+            search_all,
+            sources,
+            kw,
+            max(1, body.page),
+            cfg=cfg.search,
+            timeout=body.timeout_sec,
+            strict=body.strict,
+        )
     except (UnsupportedRule, FetchError) as e:
         raise _fail(e) from e
     except Exception as e:  # noqa: BLE001
         raise _fail(e) from e
-    return {"keyword": kw, "source": src.name, "books": books}
+    return {"keyword": kw, "source": "", "mode": "all", "books": books, "stats": stats.to_dict()}
 
 
 @router.post("/toc")

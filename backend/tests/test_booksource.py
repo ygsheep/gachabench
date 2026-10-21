@@ -480,6 +480,18 @@ class RouterTest(unittest.TestCase):
         d = r.json()
         self.assertEqual(len(d["books"]), 2)
         self.assertEqual(d["books"][0]["author"], "忘语")
+        self.assertEqual(d["mode"], "single")
+        self.assertEqual(len(d["books"][0]["candidates"]), 1)
+
+    def test_all_sources_mode_is_the_default(self):
+        """不传 source = 全网并行，响应里带书源账本。"""
+        self._enable()
+        d = self.client.post("/api/search", json={"keyword": "凡人"}).json()
+        self.assertEqual(d["mode"], "all")
+        self.assertEqual(d["books"][0]["candidates"][0]["source"], "测试源")
+        self.assertEqual(d["stats"]["requested"], 1)
+        self.assertEqual(d["stats"]["ok"], 1)
+        self.assertEqual(d["stats"]["hit"], 1)
 
     def test_empty_keyword_is_400(self):
         self._enable()
@@ -771,6 +783,69 @@ class RequestOptionTest(unittest.TestCase):
         src.rule_search["bookList"] = "@XPath://div"
         with self.assertRaises(bs.UnsupportedRule):
             bs.search_books(src, "凡人")
+
+
+class AggregatorTest(unittest.TestCase):
+    """多源并行聚合 —— 对齐原实现 aggregator.py 的并发 + 去重 + 账本。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.site = _FixtureSite()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.site.close()
+
+    def _src(self, name: str, base: str = "") -> bs.Source:
+        s = _fixture_source(base or self.site.base)
+        s.name = name
+        return s
+
+    def test_same_book_from_two_sources_is_merged(self):
+        """同一本书在两个源都命中 → 一条结果两个候选，不是两条结果。"""
+        books, stats = bs.search_all([self._src("甲源"), self._src("乙源")], "凡人")
+        self.assertEqual(len(books), 2)
+        self.assertEqual(len(books[0]["candidates"]), 2)
+        self.assertEqual(books[0]["sources"], ["甲源", "乙源"])
+        self.assertEqual(stats.requested, 2)
+        self.assertEqual(stats.ok, 2)
+        self.assertEqual(stats.failed, 0)
+
+    def test_one_dead_source_does_not_fail_the_batch(self):
+        """单个源连不上只进账本，其余源照出结果。"""
+        dead = self._src("死源", "http://127.0.0.1:1")
+        books, stats = bs.search_all([dead, self._src("活源")], "凡人")
+        self.assertEqual(len(books), 2)
+        self.assertEqual(stats.failed, 1)
+        self.assertEqual(stats.ok, 1)
+        self.assertEqual(stats.returned, 1)
+        self.assertEqual(stats.requested, 2)
+
+    def test_strict_drops_unrelated_hits(self):
+        """搜索页常混推荐位；精确模式只留书名/作者命中关键词的。"""
+        loose, _ = bs.search_all([self._src("甲源")], "诛仙")
+        self.assertEqual(len(loose), 2)
+        tight, _ = bs.search_all([self._src("甲源")], "诛仙", strict=True)
+        self.assertEqual([b["name"] for b in tight], ["诛仙"])
+
+    def test_names_filter_limits_sources(self):
+        books, stats = bs.search_all(
+            [self._src("甲源"), self._src("乙源")], "凡人", names=["乙源"]
+        )
+        self.assertEqual(stats.requested, 1)
+        self.assertEqual(books[0]["sources"], ["乙源"])
+
+    def test_no_searchable_source_raises(self):
+        s = self._src("跑不了")
+        s.unsupported = "需要 JS 引擎"
+        with self.assertRaises(bs.UnsupportedRule):
+            bs.search_all([s], "凡人")
+
+    def test_candidates_keep_config_order(self):
+        """元数据取配置序首个命中源，候选也同序 —— 用户看到的第一顺位要稳定。"""
+        books, _ = bs.search_all([self._src("乙源"), self._src("甲源")], "凡人")
+        self.assertEqual(books[0]["sources"], ["乙源", "甲源"])
+        self.assertTrue(books[0]["bookUrl"].endswith("/book/1"))
 
 
 if __name__ == "__main__":
