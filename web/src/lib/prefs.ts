@@ -100,7 +100,7 @@ export const DEFAULT_PREFS: Prefs = {
   recent: { ...DEFAULT_RECENT, segs: [] },
 }
 
-/** 与 `store/useApp.ts` 的 View 对齐（type-only import，运行期无循环依赖） */
+/** v1 的页面偏好字段；P0 路由化后不再用于决定页面，保留只为旧值兼容。 */
 type View = "board" | "split" | "locator" | "assets" | "library" | "search" | "settings"
 
 export interface Prefs {

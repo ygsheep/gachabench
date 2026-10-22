@@ -10,7 +10,7 @@ import { api } from "@/lib/api"
 import { exportRange } from "@/lib/download"
 import { useSwrQuery } from "@/lib/useSwrQuery"
 import { STATUS_LABEL, chunkLabel, chunkRank, seconds } from "@/lib/format"
-import { useApp } from "@/store/useApp"
+import { useApp, type CardFilter } from "@/store/useApp"
 import type { Card, CardStatus, CardsResp } from "@/lib/types"
 
 interface Block {
@@ -76,10 +76,25 @@ function matches(c: Card, status: string, q: string): boolean {
   return true
 }
 
-export function GachaBoard({ workspace }: { workspace: string | null }) {
-  const filter = useApp((s) => s.filter)
-  const setFilter = useApp((s) => s.setFilter)
+export function GachaBoard({
+  workspace,
+  filter: filterProp,
+  onFilterChange,
+}: {
+  workspace: string | null
+  /** 有值时以路由 search 为准；没有时退回 store（旧入口） */
+  filter?: CardFilter
+  onFilterChange?: (patch: Partial<CardFilter>) => void
+}) {
+  const storeFilter = useApp((s) => s.filter)
+  const storeSetFilter = useApp((s) => s.setFilter)
   const setSeg = useApp((s) => s.setSeg)
+
+  const filter = filterProp ?? storeFilter
+  const setFilter = (patch: Partial<CardFilter>) => {
+    storeSetFilter(patch)
+    onFilterChange?.(patch)
+  }
 
   const [review, setReview] = useState<{ seg: string; chunk: string; initialId: number } | null>(null)
   const [focusRow, setFocusRow] = useState<string | null>(null)

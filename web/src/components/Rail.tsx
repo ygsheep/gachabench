@@ -1,28 +1,37 @@
 import {
-  BookOpen,
   BookSearch,
+  Film,
   FileText,
   FolderPlus,
   Images,
   LayoutGrid,
   RotateCw,
-  Scissors,
   Settings,
 } from "lucide-react"
+import { Link, useRouterState } from "@tanstack/react-router"
 import { cn } from "cn"
-import { useApp, type View } from "@/store/useApp"
 import { useHealth } from "@/lib/health"
 import type { Workspace } from "@/lib/types"
 
-const NAV: { key: View; label: string; Icon: typeof LayoutGrid }[] = [
-  { key: "board", label: "抽卡台", Icon: LayoutGrid },
-  { key: "split", label: "拆分台", Icon: Scissors },
-  { key: "locator", label: "定位工单", Icon: FileText },
-  { key: "assets", label: "资产管理", Icon: Images },
-  { key: "library", label: "原著库", Icon: BookOpen },
-  { key: "search", label: "小说搜索", Icon: BookSearch },
-  { key: "settings", label: "设置", Icon: Settings },
-]
+const NAV = [
+  { key: "assets", to: "/assets", label: "资产库", Icon: Images },
+  { key: "search", to: "/search", label: "小说搜索", Icon: BookSearch },
+  { key: "prompts", to: "/prompts", label: "提示词工程", Icon: FileText },
+  { key: "review", to: "/review", label: "审片台", Icon: LayoutGrid },
+  { key: "produce", to: "/produce", label: "制作", Icon: Film },
+  { key: "settings", to: "/settings", label: "设置", Icon: Settings },
+] as const
+
+type NavKey = (typeof NAV)[number]["key"]
+
+function activeKey(pathname: string): NavKey {
+  if (pathname.startsWith("/search")) return "search"
+  if (pathname.startsWith("/prompts")) return "prompts"
+  if (pathname.startsWith("/review")) return "review"
+  if (pathname.startsWith("/produce")) return "produce"
+  if (pathname.startsWith("/settings")) return "settings"
+  return "assets"
+}
 
 const ROW = 54 // 52px 按钮 + 2px 间距
 
@@ -39,15 +48,15 @@ export function Rail({
   switching: boolean
   onOpenProjects: () => void
 }) {
-  const view = useApp((s) => s.view)
-  const setView = useApp((s) => s.setView)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const current = activeKey(pathname)
   const health = useHealth()
   const online = !!health.data && !health.isError
   const ffmpeg = health.data?.ffmpeg ?? false
   const comfy = health.data?.comfyui.configured ?? false
   const index = Math.max(
     0,
-    NAV.findIndex((n) => n.key === view)
+    NAV.findIndex((n) => n.key === current)
   )
 
   return (
@@ -65,14 +74,13 @@ export function Rail({
           <span className="absolute -left-px bottom-[13px] top-[13px] w-0.5 rounded bg-white" />
         </span>
 
-        {NAV.map(({ key, label, Icon }) => {
-          const on = view === key
+        {NAV.map(({ key, to, label, Icon }) => {
+          const on = current === key
           return (
-            <button
+            <Link
               key={key}
-              type="button"
-              onClick={() => setView(key)}
-              aria-current={on}
+              to={to}
+              aria-current={on ? "page" : undefined}
               className={cn(
                 "relative z-1 flex h-[52px] flex-col items-center justify-center gap-1 rounded-ctl text-[10.5px] transition-colors",
                 "max-[980px]:h-11 max-[980px]:flex-1",
@@ -85,7 +93,7 @@ export function Rail({
                 strokeWidth={1.7}
               />
               {label}
-            </button>
+            </Link>
           )
         })}
       </nav>

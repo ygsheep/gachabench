@@ -27,9 +27,21 @@ import type {
  * 现在只认后端 /api/segments/{seg}/chunks 的实时结果，前端只负责把它画到时间轴上。
  */
 
-export function SplitPanel() {
-  const seg = useApp((s) => s.seg)
-  const setSeg = useApp((s) => s.setSeg)
+export function SplitPanel({
+  seg: routeSeg,
+  onSegChange,
+}: {
+  /** 来自 /prompts/$seg；没有时用 store 里的上次段号 */
+  seg?: string
+  onSegChange?: (seg: string) => void
+} = {}) {
+  const storeSeg = useApp((s) => s.seg)
+  const setStoreSeg = useApp((s) => s.setSeg)
+  const seg = routeSeg ?? storeSeg
+  const setSeg = (next: string) => {
+    setStoreSeg(next)
+    onSegChange?.(next)
+  }
   const [strategy, setStrategy] = useState<"jia" | "yi">("yi")
   const [focus, setFocus] = useState<number | null>(null)
   const [planId, setPlanId] = useState<number | null>(null)

@@ -412,7 +412,7 @@ function RefPickerDialog({
   const [kw, setKw] = useState("")
   const assetsQ = useQuery({
     queryKey: ["assets"],
-    queryFn: () => api.get<AssetsResp>("/api/assets"),
+    queryFn: () => api.get<AssetsResp>("/api/assets/groups"),
     retry: 1,
   })
 

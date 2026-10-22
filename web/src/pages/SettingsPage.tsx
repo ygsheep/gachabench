@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { FolderOpen, RotateCw, Save } from "lucide-react"
 import { cn } from "cn"
 import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
 import { PREFS_KEY, loadPrefs, resetPrefs, writeJSON, type Prefs } from "@/lib/prefs"
-import { useApp } from "@/store/useApp"
 import type { ConfigResp, FolderPickerCapability, FolderKey, WorkflowsResp } from "@/lib/types"
 
 const OUTLINE_BTN =
@@ -33,7 +33,7 @@ const TIMEOUT_RANGE = [1, 1440] as const
 
 export function SettingsPage({ workspace }: { workspace: string | null }) {
   const qc = useQueryClient()
-  const setView = useApp((s) => s.setView)
+  const navigate = useNavigate()
 
   const cfgQ = useQuery({
     queryKey: ["config"],
@@ -79,7 +79,7 @@ export function SettingsPage({ workspace }: { workspace: string | null }) {
         <RunSection cfg={cfgQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })} />
         <WorkflowSection cfg={cfgQ.data} workflows={wfQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["workflows", "config"] })} />
         <FoldersSection cfg={cfgQ.data} workspace={workspace} onSaved={() => qc.invalidateQueries({ queryKey: ["config", "workspaces"] })} />
-        <UiSection onJump={() => setView("board")} />
+        <UiSection onJump={() => void navigate({ to: "/review" })} />
       </div>
     </div>
   )
@@ -482,7 +482,7 @@ function UiSection({ onJump }: { onJump: () => void }) {
     // 直接写盘（不等防抖）：设置页的开关应当即生效
     writeJSON(PREFS_KEY, prefs)
     toast.success("界面偏好已保存", {
-      description: prefs.keepOnReload ? "刷新后会回到上次的位置" : "刷新后回到抽卡台",
+      description: prefs.keepOnReload ? "刷新后会保留筛选条件" : "刷新后回到默认筛选",
     })
   }
 
@@ -498,14 +498,14 @@ function UiSection({ onJump }: { onJump: () => void }) {
         <Switch
           checked={prefs.keepOnReload}
           onCheckedChange={(v) => patch({ keepOnReload: v })}
-          aria-label="刷新后回到上次的视图与筛选"
+          aria-label="刷新后保留筛选条件"
         />
-        <span className="text-[12.5px] text-ash">刷新后回到上次的视图与筛选</span>
+        <span className="text-[12.5px] text-ash">刷新后保留筛选条件</span>
         <span className="flex-1" />
         {dirty && <SaveBtn busy={false} onClick={save} />}
       </div>
       <p className="text-[11px] leading-relaxed text-ash-dim">
-        关掉之后，每次刷新都回到抽卡台、清空筛选。审片器分隔条的高度另有自己的记忆
+        关掉之后，每次刷新都清空卡池筛选。页面位置由地址栏决定，不受这里影响。审片器分隔条的高度另有自己的记忆
         （键 <span className="font-mono">gb-review-stage</span>），不受这里影响。
       </p>
       <div className="flex items-center gap-2.5">

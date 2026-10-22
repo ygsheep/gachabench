@@ -12,10 +12,9 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 from config import BACKEND_DIR, PROJECT_ROOT, get_config
 from runtime import DIST_DIR, IS_FROZEN, CONFIG_PATH, open_browser_later, pick_port, seed_config, fix_streams
@@ -87,15 +86,42 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _sweep_stale_jobs()
     # 顺序很重要：先把僵尸任务落成「已中断」，补收才知道该去查哪些 prompt_id
     await _reconcile_once("startup")
+
+    # P1：先接上 SSE 事件循环，再触发/监听索引，进度才不会丢。
+    from modules.assets.service import get_scan_manager
+    from modules.assets.watcher import watch_workspace
+    from modules.system.events import bus
+
+    bus.attach_loop(asyncio.get_running_loop())
+    manager = get_scan_manager()
+    watch_stop = asyncio.Event()
+    watch_task: asyncio.Task | None = None
+    root = get_config().ws_root()
+    if root is not None:
+        try:
+            await asyncio.to_thread(manager.ensure_started, root)
+            watch_task = asyncio.create_task(watch_workspace(root, watch_stop))
+        except Exception as e:  # noqa: BLE001  索引失败不该拦住窗口
+            print(f"[startup] 资产索引启动失败：{e}")
+
     task = asyncio.create_task(_reconcile_loop())
     try:
         yield
     finally:
         task.cancel()
+        watch_stop.set()
+        if watch_task is not None:
+            watch_task.cancel()
+        manager.shutdown()
         try:
             await task
         except (asyncio.CancelledError, Exception):  # noqa: BLE001
             pass
+        if watch_task is not None:
+            try:
+                await watch_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
 
 
 app = FastAPI(title="GachaBench", version="0.1.0", lifespan=lifespan)
@@ -107,6 +133,9 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        # Tauri v2 的 WebView 来源（P0 先放行，P8 接桌面端时不再补）
+        "tauri://localhost",
+        "http://tauri.localhost",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -156,6 +185,8 @@ def _include_routers() -> None:
         workspace, media, cards, split, generate, agent, locate, ffmpeg, workflows, assets,
         system, config_api, export, library, search,
     )
+    from modules.assets.api import media_router as asset_media_router, router as asset_index_router
+    from modules.system.events import router as events_router
 
     for router in (
         workspace.router,
@@ -170,7 +201,11 @@ def _include_routers() -> None:
         locate.router,
         ffmpeg.router,
         workflows.router,
+        # 旧资产路由先挂：/groups、/target、/upload、/file 不被 /{asset_id} 吞掉
         assets.router,
+        asset_index_router,
+        asset_media_router,
+        events_router,
         system.router,
         config_api.router,
         export.router,
@@ -183,10 +218,22 @@ def _include_routers() -> None:
 # 挂载业务路由（必须先于静态 mount，否则 '/api/*' 会被 SPA fallback 吞掉）
 _include_routers()
 
-# 静态托管 web/dist（生产模式；未构建时忽略）
+# 静态托管 web/dist（生产模式；未构建时忽略）。
+# 直接用 catch-all 而不是 StaticFiles：SPA 的 /review、/assets 这类直链在磁盘上没有
+# 对应文件，需要回落到 index.html；而 Vite 的静态资源目录恰好也叫 /assets，
+# 所以「是文件就发文件、不是文件就发首页」的判断放在同一个处理函数里。
 _DIST = DIST_DIR
 if _DIST.is_dir():
-    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="web")
+    _DIST_ROOT = _DIST.resolve()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        target = (_DIST / full_path).resolve()
+        if full_path and target.is_file() and _DIST_ROOT in target.parents:
+            return FileResponse(target)
+        return FileResponse(_DIST / "index.html")
 
 
 def main() -> None:

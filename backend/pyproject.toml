@@ -5,10 +5,15 @@ description = "GachaBench backend — 通用 ComfyUI 视频抽卡工作台"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.20.0",
     "fastapi>=0.143.2",
     "httpx>=0.28.1",
+    "pillow>=11",
     "pydantic>=2.14.1",
     "pydantic-settings>=2.16.0",
+    "pytest>=8",
     "python-multipart>=0.0.32",
+    "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.54.0",
+    "watchfiles>=0.24",
 ]

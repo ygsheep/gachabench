@@ -188,8 +188,9 @@ def _resolve_target(
     return base, ""
 
 
-@router.get("")
+@router.get("/groups")
 async def list_assets_api():
+    """旧分组视图。新索引的分页列表在 `GET /api/assets`。"""
     cfg, root, ws_name, base = _context()
     _scan(base, root, ws_name)  # 每次都同步磁盘 → 库，保证列表不落灰
 
@@ -239,8 +240,9 @@ async def list_assets_api():
     }
 
 
-@router.post("/scan")
+@router.post("/groups/scan")
 async def rescan_assets():
+    """旧同步重扫。新索引的异步扫描在 `POST /api/assets/scan`。"""
     _cfg, root, ws_name, base = _context()
     return {"ok": True, "asset_dir": base.name, **_scan(base, root, ws_name)}
 
@@ -361,6 +363,15 @@ async def upload_assets(
             "deduped": deduped,
             "url": "/api/assets/file/%s" % quote(rel),
         })
+
+        # 旧表照旧写；同时补一条新索引，资产页上传后立即可见。
+        try:
+            from modules.assets.service import get_scan_manager
+
+            ws_rel = dest.relative_to(Path(root).resolve()).as_posix()
+            get_scan_manager().index_one(root, ws_rel)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[assets] 新索引同步失败（旧上传仍成功）：{exc}")
 
     return {
         "ok": True,

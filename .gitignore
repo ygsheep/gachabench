@@ -182,3 +182,13 @@ desktop/node_modules/
 Thumbs.db
 *.local
 
+# 后端测试临时工作区（临时目录名随机，绝不入库）
+backend/_searchtest*/
+backend/_srctest*/
+backend/gb-repro*/
+backend/gb_dir_*/
+backend/gb_lib*/
+backend/gb_libapi_*/
+backend/gb_range*/
+backend/gb_rangeapi_*/
+

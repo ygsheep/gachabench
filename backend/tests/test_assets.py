@@ -391,7 +391,7 @@ class TestEndpoints(AssetCase):
         self.write("场景/教室/教室_实拍.webp", WEBP)
         self.write("_env.py", b"print(1)")
 
-        r = self.client.get("/api/assets")
+        r = self.client.get("/api/assets/groups")
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body["asset_dir"], "素材")
@@ -412,39 +412,39 @@ class TestEndpoints(AssetCase):
         (self.root / "资产").mkdir()
         self.install(folder="资产")
         self.write("白陌_参考.png")
-        body = self.client.get("/api/assets").json()
+        body = self.client.get("/api/assets/groups").json()
         self.assertEqual(body["asset_dir"], "资产")
         self.assertEqual(body["total"], 1)
 
     def test_list_409_when_asset_dir_undecided(self):
         (self.root / "其他").mkdir()
         self.install(folder="")
-        r = self.client.get("/api/assets")
+        r = self.client.get("/api/assets/groups")
         self.assertEqual(r.status_code, 409)
         self.assertIn("资产目录", r.json()["detail"])
 
     def test_list_400_when_no_active_workspace(self):
         self.install(active=None)
-        self.assertEqual(self.client.get("/api/assets").status_code, 400)
+        self.assertEqual(self.client.get("/api/assets/groups").status_code, 400)
 
     def test_rescan_reports_deltas(self):
         self.write("白陌_参考.png")
-        first = self.client.post("/api/assets/scan").json()
+        first = self.client.post("/api/assets/groups/scan").json()
         self.assertTrue(first["ok"])
         self.assertEqual((first["scanned"], first["added"], first["removed"]), (1, 1, 0))
 
         self.write("白陌_配音.mp3", MP3)
-        second = self.client.post("/api/assets/scan").json()
+        second = self.client.post("/api/assets/groups/scan").json()
         self.assertEqual((second["scanned"], second["added"], second["updated"]), (2, 1, 1))
 
         (self.base / "白陌_参考.png").unlink()
-        third = self.client.post("/api/assets/scan").json()
+        third = self.client.post("/api/assets/groups/scan").json()
         self.assertEqual((third["scanned"], third["removed"]), (1, 1))
 
     def test_rescan_409_when_asset_dir_undecided(self):
         (self.root / "其他").mkdir()
         self.install(folder="")
-        self.assertEqual(self.client.post("/api/assets/scan").status_code, 409)
+        self.assertEqual(self.client.post("/api/assets/groups/scan").status_code, 409)
 
     def test_target_preview_new_and_existing_subject(self):
         r = self.client.get(

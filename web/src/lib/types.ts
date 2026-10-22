@@ -599,3 +599,113 @@ export interface CollectResp extends ImportResp {
   failed: { index: number; title: string; reason: string }[]
   requested: number
 }
+
+// ---------------------------------------------------------------------------
+// P1 资产索引（GET/PATCH /api/assets …）
+// ---------------------------------------------------------------------------
+
+/** 索引里的一个资产（列表 / 详情共用的一层） */
+export interface IndexAssetItem {
+  id: string
+  path: string
+  name: string
+  dir_path: string
+  role: string
+  subject: string
+  category: string
+  ext: string
+  size: number
+  mtime: number
+  sha256: string | null
+  hash_status: string
+  media_kind: string
+  width: number | null
+  height: number | null
+  status: string
+  tags: string[]
+  aliases: string[]
+  thumb_url: string | null
+  media_url: string
+}
+
+/** 资产被哪些文件引用（详情接口） */
+export interface IndexRef {
+  id: string
+  file_path: string
+  line: number | null
+  col: number | null
+  kind: string
+  segment: string | null
+}
+
+export interface IndexAssetDetail extends IndexAssetItem {
+  note: string
+  subject_override: string | null
+  refs: IndexRef[]
+}
+
+export interface IndexAssetListResp {
+  items: IndexAssetItem[]
+  next_cursor: string | null
+  total: number
+  root: string
+  workspace: string
+}
+
+export interface IndexRoleCount {
+  key: string
+  label: string
+  count: number
+}
+
+export interface IndexCollectionCount {
+  id: string
+  name: string
+  kind: string
+  builtin: boolean
+  count: number
+}
+
+export interface IndexCollectionsResp {
+  roles: IndexRoleCount[]
+  collections: IndexCollectionCount[]
+}
+
+export interface AssetScanStartResp {
+  task_id: string
+  status: string
+}
+
+export interface AssetScanStatusResp {
+  id: string
+  status: string
+  started_at: string
+  finished_at: string | null
+  stats: Record<string, unknown>
+  force: boolean
+}
+
+export interface IndexMetaPatch {
+  tags?: string[]
+  aliases?: string[]
+  note?: string
+  subject_override?: string
+}
+
+/** SSE `index.progress` 的 data */
+export interface AssetProgressEvent {
+  task_id: string
+  workspace: string
+  processed: number
+  total: number
+  done: boolean
+  status?: string
+}
+
+/** SSE `file.changed` 的 data */
+export interface AssetChangedEvent {
+  task_id: string
+  workspace: string
+  status: string
+  stats: Record<string, unknown>
+}

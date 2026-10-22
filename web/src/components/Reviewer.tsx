@@ -941,7 +941,7 @@ function PromptTab({
 function AssetTab() {
   const { data, isPending, isError } = useQuery({
     queryKey: ["assets"],
-    queryFn: () => api.get<AssetsResp>("/api/assets"),
+    queryFn: () => api.get<AssetsResp>("/api/assets/groups"),
     retry: 1,
   })
 
