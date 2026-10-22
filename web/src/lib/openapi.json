@@ -624,7 +624,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchBody"
+                "$ref": "#/components/schemas/routers__cards__PatchBody"
               }
             }
           }
@@ -1853,6 +1853,326 @@
         }
       }
     },
+    "/api/assets/operations/plan": {
+      "post": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Create Plan Api",
+        "operationId": "create_plan_api_api_assets_operations_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/operations/{plan_id}/apply": {
+      "post": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Apply Plan Api",
+        "operationId": "apply_plan_api_api_assets_operations__plan_id__apply_post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/operations/{plan_id}/rollback": {
+      "post": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Rollback Plan Api",
+        "operationId": "rollback_plan_api_api_assets_operations__plan_id__rollback_post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/operations/{plan_id}": {
+      "get": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Plan Detail Api",
+        "operationId": "plan_detail_api_api_assets_operations__plan_id__get",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/duplicates": {
+      "get": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Duplicates Api",
+        "operationId": "duplicates_api_api_assets_duplicates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assets/unreferenced": {
+      "get": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Unreferenced Api",
+        "operationId": "unreferenced_api_api_assets_unreferenced_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trash": {
+      "get": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "List Trash Api",
+        "operationId": "list_trash_api_api_trash_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trash/{entry_id}/restore": {
+      "post": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Restore Trash Api",
+        "operationId": "restore_trash_api_api_trash__entry_id__restore_post",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Entry Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trash/{entry_id}": {
+      "delete": {
+        "tags": [
+          "asset-operations"
+        ],
+        "summary": "Purge Trash Api",
+        "operationId": "purge_trash_api_api_trash__entry_id__delete",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Entry Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/assets/collections": {
       "get": {
         "tags": [
@@ -2215,6 +2535,440 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Segments",
+        "operationId": "segments_api_prompts_segments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Segments Api Prompts Segments Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/context": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Context",
+        "description": "项目里已经定下来的风格 / 场景文字，用于新段继承。",
+        "operationId": "context_api_prompts_context_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Context Api Prompts Context Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Segment Detail",
+        "operationId": "segment_detail_api_prompts_segments__seg__get",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Segment Detail Api Prompts Segments  Seg  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}/render": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Render",
+        "operationId": "render_api_prompts_segments__seg__render_post",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RenderBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Render Api Prompts Segments  Seg  Render Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}/save": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Save",
+        "operationId": "save_api_prompts_segments__seg__save_post",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Save Api Prompts Segments  Seg  Save Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/files": {
+      "get": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Files",
+        "description": "人工指定素材时的候选清单。只列工作区里真实存在的图 / 音频。",
+        "operationId": "files_api_prompts_files_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "image",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Files Api Prompts Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}/bindings": {
+      "put": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Put Binding",
+        "description": "人工指定 / 忽略 / 恢复自动。\n\n- 给 `file`：手动绑定；\n- 给 `ignored=true`：忽略这一项，编号保留；\n- 两个都不给：删记录，回到自动匹配。",
+        "operationId": "put_binding_api_prompts_segments__seg__bindings_put",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Put Binding Api Prompts Segments  Seg  Bindings Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}/check": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Check",
+        "description": "规则诊断。不传 content 就诊断当前渲染结果；传了就诊断手里这份草稿。",
+        "operationId": "check_api_prompts_segments__seg__check_post",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CheckBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Check Api Prompts Segments  Seg  Check Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prompts/segments/{seg}/patch": {
+      "post": {
+        "tags": [
+          "prompts"
+        ],
+        "summary": "Make Patch",
+        "description": "把「可机械修」的结论攒成补丁：返回 hunks、改完的全文、改完还剩的问题。",
+        "operationId": "make_patch_api_prompts_segments__seg__patch_post",
+        "parameters": [
+          {
+            "name": "seg",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Seg"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/modules__prompts__api__PatchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Make Patch Api Prompts Segments  Seg  Patch Post"
+                }
               }
             }
           },
@@ -3287,6 +4041,34 @@
         ],
         "title": "AssetRefItem"
       },
+      "BindingBody": {
+        "properties": {
+          "placeholder": {
+            "type": "string",
+            "title": "Placeholder"
+          },
+          "file": {
+            "type": "string",
+            "title": "File",
+            "default": ""
+          },
+          "ignored": {
+            "type": "boolean",
+            "title": "Ignored",
+            "default": false
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "placeholder"
+        ],
+        "title": "BindingBody"
+      },
       "Body_import_api_api_library_import_post": {
         "properties": {
           "file": {
@@ -3432,6 +4214,23 @@
         },
         "type": "object",
         "title": "ChapterBody"
+      },
+      "CheckBody": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "title": "CheckBody"
       },
       "CollectionCount": {
         "properties": {
@@ -4037,106 +4836,6 @@
         ],
         "title": "OpenBody"
       },
-      "PatchBody": {
-        "properties": {
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
-          },
-          "reject_tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reject Tags"
-          },
-          "reject_note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reject Note"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          },
-          "seg": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Seg"
-          },
-          "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tags"
-          },
-          "chunk": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chunk"
-          },
-          "prompt_md": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prompt Md"
-          }
-        },
-        "type": "object",
-        "title": "PatchBody"
-      },
       "PickFolderBody": {
         "properties": {
           "title": {
@@ -4152,6 +4851,59 @@
         },
         "type": "object",
         "title": "PickFolderBody"
+      },
+      "PlanRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          },
+          "asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Asset Ids"
+          },
+          "dest_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dest Dir"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "PlanRequest"
       },
       "RangeBody": {
         "properties": {
@@ -4309,6 +5061,63 @@
         ],
         "title": "RefSelectItem"
       },
+      "RenderBody": {
+        "properties": {
+          "style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Style"
+          },
+          "scene": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene"
+          },
+          "era_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Era Region"
+          },
+          "aspect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "maximum": 9.0,
+            "minimum": 1.0,
+            "title": "Chunk Index",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "RenderBody"
+      },
       "RoleCount": {
         "properties": {
           "key": {
@@ -4331,6 +5140,29 @@
           "count"
         ],
         "title": "RoleCount"
+      },
+      "SaveBody": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "default": ""
+          },
+          "overwrite": {
+            "type": "boolean",
+            "title": "Overwrite",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "SaveBody"
       },
       "ScanRequest": {
         "properties": {
@@ -4544,6 +5376,126 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "modules__prompts__api__PatchBody": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "PatchBody"
+      },
+      "routers__cards__PatchBody": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "reject_tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Tags"
+          },
+          "reject_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Note"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "seg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seg"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "chunk": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk"
+          },
+          "prompt_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Md"
+          }
+        },
+        "type": "object",
+        "title": "PatchBody"
       }
     }
   }

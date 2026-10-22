@@ -15,7 +15,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    // 旧 node:test 用例仍在 src/lib/*.test.ts，由 npm test 跑；新用例统一带 .ui.test.ts
-    include: ["src/**/*.ui.test.ts"],
+    // 旧 node:test 用例仍在 src/lib/*.test.ts，由 npm test 跑；新用例统一带 .ui.test.ts(x)
+    include: ["src/**/*.ui.test.{ts,tsx}"],
   },
 })

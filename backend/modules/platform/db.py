@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Iterator, Optional
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+log = logging.getLogger("gachabench.schema")
 
 
 class Base(DeclarativeBase):
@@ -26,6 +29,9 @@ _engines: dict[str, Engine] = {}
 _factories: dict[str, sessionmaker] = {}
 _ensured: set[str] = set()
 _guard = threading.RLock()
+# 迁移串行锁：ensure_schema 会跑 Alembic，多个请求同时首次访问一个新工作区时
+# 必须排队，否则并发 upgrade 会互相抢 SQLite 写锁（database is locked）。
+_schema_guard = threading.RLock()
 
 
 def db_path(ws_root: Path) -> Path:
@@ -69,6 +75,10 @@ def get_engine(ws_root: Path) -> Engine:
 def get_sessionmaker(ws_root: Path) -> sessionmaker:
     root = Path(ws_root).resolve()
     key = str(root)
+    # 所有走 SQLAlchemy 的读写都从这里拿 session，所以把 schema 兜底放在这里：
+    # 任何工作区（含切换后新激活的、新建的、启动后才有数据的）第一次被访问时，
+    # 都会先把 Alembic 升到 head，再返回 session —— 避免「表不存在」直接 500。
+    ensure_schema_once(root)
     with _guard:
         factory = _factories.get(key)
         if factory is None:
@@ -138,7 +148,7 @@ def ensure_schema(ws_root: Path) -> bool:
             command.upgrade(cfg, "head")
         except Exception as exc:  # noqa: BLE001
             # 迁移失败不能让窗口起不来；退回 create_all，并把原因留在日志里。
-            print(f"[schema] Alembic 升级失败，退回 create_all：{exc}")
+            log.exception("[schema] Alembic 升级失败，退回 create_all：%s", exc)
             _fallback_create(engine)
     else:
         _fallback_create(engine)
@@ -151,6 +161,7 @@ def ensure_schema(ws_root: Path) -> bool:
 
 def _fallback_create(engine: Engine) -> None:
     from modules.assets import models  # noqa: F401  注册元数据
+    from modules.prompts import models as prompt_models  # noqa: F401
 
     Base.metadata.create_all(engine)
 
@@ -159,7 +170,11 @@ def _ensure_sqlite_extras(engine: Engine) -> None:
     """FTS5 虚拟表。trigram 不可用时由搜索模块退回 LIKE。"""
     from modules.assets.search import ensure_fts
 
-    ensure_fts(engine)
+    try:
+        ensure_fts(engine)
+    except Exception as exc:  # noqa: BLE001
+        # 附加结构失败不该让「表已建好」的 schema 升级整体失败
+        log.warning("[schema] FTS 附加结构创建失败，搜索退回 LIKE：%s", exc)
 
 
 def ensure_schema_once(ws_root: Path) -> None:
@@ -169,9 +184,14 @@ def ensure_schema_once(ws_root: Path) -> None:
     with _guard:
         if key in _ensured:
             return
-    ensure_schema(root)
-    with _guard:
-        _ensured.add(key)
+    # 串行化首次迁移：同一工作区被多个线程同时首访时只跑一次 Alembic
+    with _schema_guard:
+        with _guard:
+            if key in _ensured:
+                return
+        ensure_schema(root)
+        with _guard:
+            _ensured.add(key)
 
 
 def reset_engines() -> None:

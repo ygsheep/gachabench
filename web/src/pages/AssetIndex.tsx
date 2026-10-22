@@ -526,7 +526,7 @@ export function AssetIndex({
     : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* ================= 页头 ================= */}
       <header className="flex flex-wrap items-end gap-x-3.5 gap-y-2 px-6 pb-3.5 pt-5">
         <div className="max-w-[82ch]">

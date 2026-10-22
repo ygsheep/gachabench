@@ -12,7 +12,7 @@ describe("旧 hash 入口", () => {
   it("落到约定的新地址", () => {
     expect(LEGACY_HASH_TARGETS).toEqual({
       board: "/review",
-      split: "/prompts",
+      split: "/produce?tab=split",
       locator: "/prompts",
       assets: "/assets",
       library: "/assets?collection=novel",

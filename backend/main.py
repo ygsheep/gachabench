@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import shutil
 import sys
@@ -21,6 +22,10 @@ from runtime import DIST_DIR, IS_FROZEN, CONFIG_PATH, open_browser_later, pick_p
 
 # 允许在 `python backend/main.py` 与 `uvicorn main:app` 两种方式下都能 import 模块
 sys.path.insert(0, str(BACKEND_DIR))
+
+# 启动期诊断一律走 logging（stderr，不经缓冲区），避免 `print` 被块缓冲吞掉后
+# 只留下「表不存在」的 500，排查时看不到真正原因。
+log = logging.getLogger("gachabench.startup")
 
 def _sweep_stale_jobs() -> None:
     """启动扫尾：库里还挂着 queued/running 的任务都是僵尸。
@@ -42,9 +47,9 @@ def _sweep_stale_jobs() -> None:
         try:
             n += mark_stale_jobs(get_db(root), ws.name)
         except Exception as e:  # 扫尾失败不该拦住服务启动
-            print(f"[startup] 清理「{ws.name}」的中断任务失败：{e}")
+            log.warning("[startup] 清理「%s」的中断任务失败：%s", ws.name, e)
     if n:
-        print(f"[startup] 已把 {n} 条中断的任务标为「已中断」")
+        log.info("[startup] 已把 %s 条中断的任务标为「已中断」", n)
 
 
 async def _reconcile_once(tag: str) -> None:
@@ -102,7 +107,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             await asyncio.to_thread(manager.ensure_started, root)
             watch_task = asyncio.create_task(watch_workspace(root, watch_stop))
         except Exception as e:  # noqa: BLE001  索引失败不该拦住窗口
-            print(f"[startup] 资产索引启动失败：{e}")
+            log.exception("[startup] 资产索引启动失败（%s）：%s", root, e)
 
     task = asyncio.create_task(_reconcile_loop())
     try:
@@ -187,6 +192,7 @@ def _include_routers() -> None:
     )
     from modules.assets.api import media_router as asset_media_router, router as asset_index_router
     from modules.assets.ops_api import router as asset_ops_router
+    from modules.prompts.api import router as prompts_router
     from modules.system.events import router as events_router
 
     for router in (
@@ -209,6 +215,7 @@ def _include_routers() -> None:
         asset_index_router,
         asset_media_router,
         events_router,
+        prompts_router,
         system.router,
         config_api.router,
         export.router,
@@ -250,10 +257,10 @@ def main() -> None:
     url = f"http://127.0.0.1:{port}"
 
     if port != preferred:
-        print(f"[warn] 端口 {preferred} 已被占用，改用 {port}")
-    print(f"GachaBench backend -> {url}")
+        print(f"[warn] 端口 {preferred} 已被占用，改用 {port}", flush=True)
+    print(f"GachaBench backend -> {url}", flush=True)
     if not _DIST.is_dir():
-        print("[warn] 没找到 web/dist —— 界面会 404。源码运行请先 `npm run build`。")
+        print("[warn] 没找到 web/dist —— 界面会 404。源码运行请先 `npm run build`。", flush=True)
     if IS_FROZEN:
         print(f"配置文件 -> {CONFIG_PATH}")
         print("关闭这个窗口即退出服务。")

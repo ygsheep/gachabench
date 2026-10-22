@@ -2,6 +2,7 @@
 """工作区 API：列表 / 新建 / 打开 / 激活 / 目录角色 / 重命名 / 移除 / 扫描。"""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 
 from workspaces import (
     WorkSpaceError,
+    WorkspaceEntry,
     activate,
     create_workspace,
     inspect_root,
@@ -20,7 +22,27 @@ from workspaces import (
     set_folders,
 )
 
+log = logging.getLogger("gachabench.workspace")
+
 router = APIRouter(prefix="/api/workspaces", tags=["workspace"])
+
+
+def _warm_index(entry: WorkspaceEntry) -> None:
+    """工作区被新建 / 打开 / 切换后，立刻把它的库升到最新 schema 并起一次索引。
+
+    以前 schema 只在进程启动时对「当时的活动工作区」建一次，切到别的工作区后
+    cards.db 还停在旧结构，资产接口就会 `no such table: index_assets` 连着 500。
+    这里补上切换路径的兜底；失败只记日志，不影响接口本身返回。
+    """
+    from modules.assets.service import get_scan_manager
+
+    root = Path(entry.root)
+    if not root.is_dir():
+        return
+    try:
+        get_scan_manager().ensure_started(root)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("[workspace] 「%s」索引预热失败：%s", entry.name, exc)
 
 
 class CreateBody(BaseModel):
@@ -75,6 +97,7 @@ async def create(body: CreateBody):
         entry = create_workspace(body.parent_dir, body.name, body.asset_dir)
     except WorkSpaceError as e:
         raise _err(e)
+    _warm_index(entry)
     return {"workspace": entry, "active": entry.name}
 
 
@@ -85,6 +108,7 @@ async def open_ws(body: OpenBody):
         entry = open_workspace(body.root, body.name, body.asset_dir, body.create_missing)
     except WorkSpaceError as e:
         raise _err(e)
+    _warm_index(entry)
     return {"workspace": entry, "active": entry.name}
 
 
@@ -94,6 +118,7 @@ async def activate_ws(name: str):
         ws = activate(name)
     except WorkSpaceError as e:
         raise _err(e)
+    _warm_index(ws)
     return {"workspace": ws, "active": ws.name}
 
 

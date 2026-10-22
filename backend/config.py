@@ -111,6 +111,22 @@ class SearchConfig(BaseModel):
     attribution: bool = True
 
 
+class AgentConfig(BaseModel):
+    """提示词工程的模型 Provider。
+
+    默认指向 DeepSeek 官方接口；base_url 可改成任何 OpenAI 兼容端点
+    （中转站、本地 Ollama / vLLM 都行）。密钥**不在这里**：
+    它单独存在用户配置目录（见 modules/agent/keys.py），不进 config.json。
+    """
+
+    enabled: bool = True
+    provider: str = "deepseek"
+    base_url: str = "https://api.deepseek.com"
+    model: str = "deepseek-v4-flash"
+    timeout_sec: int = 120
+    temperature: float = 0.3
+
+
 class WorkspaceEntry(BaseModel):
     name: str
     root: str
@@ -134,6 +150,7 @@ class Config(BaseModel):
     workspaces: list[WorkspaceEntry] = Field(default_factory=list)
     active: Optional[str] = None
     search: SearchConfig = Field(default_factory=SearchConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
 
     # ---------- 运行期派生（不入库） ----------
     def active_ws(self) -> Optional[WorkspaceEntry]:

@@ -8,6 +8,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router"
 import { toast } from "sonner"
+import { cn } from "cn"
 import { Rail } from "@/components/Rail"
 import { TaskBar } from "@/components/TaskBar"
 import { WorkspaceGate } from "@/pages/WorkspaceGate"
@@ -28,9 +29,9 @@ export const rootRoute = createRootRoute({
   beforeLoad: ({ location }) => {
     const legacy = legacyHashKey(location.hash)
     if (legacy === "board") throw redirect({ to: "/review", replace: true })
-    if (legacy === "split" || legacy === "locator") {
-      throw redirect({ to: "/prompts", replace: true })
-    }
+    // 拆分台在 P3 收进了「制作」，旧 #/split 直接落到制作页的拆分标签
+    if (legacy === "split") throw redirect({ to: "/produce", search: { tab: "split" }, replace: true })
+    if (legacy === "locator") throw redirect({ to: "/prompts", replace: true })
     if (legacy === "library") {
       throw redirect({ to: "/assets", search: { collection: "novel" }, replace: true })
     }
@@ -46,6 +47,8 @@ function RootLayout() {
   const resetFilter = useApp((s) => s.resetFilter)
   const queryClient = useQueryClient()
   const [gateOpen, setGateOpen] = useState(false)
+  // 路由必须在任何提前 return 之前读（Hooks 不能条件调用）
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
 
   /* 启动探测与 Rail 的健康灯共用同一个 queryKey（lib/health.ts）：
      这里只负责「从来没连上过」时的满屏提示；连上之后后端再掉线，
@@ -102,6 +105,7 @@ function RootLayout() {
   if (!workspaces.length || !health.data?.active_workspace) return <WorkspaceGate />
 
   const active = ws.data?.active ?? health.data.active_workspace
+  const fixedViewport = pathname.startsWith("/assets")
 
   return (
     <WorkspaceProvider value={active}>
@@ -114,7 +118,16 @@ function RootLayout() {
           onOpenProjects={() => setGateOpen(true)}
         />
 
-        <main className="flex min-w-0 flex-1 flex-col max-[980px]:pb-[58px]">
+        {/* 资产页是「视口高度固定 + 内层自己滚」的布局（虚拟网格要求如此）。
+            主区不锁高度时，它内层的 overflow-auto 会被内容撑满，滚动实际发生在文档上：
+            此时任何一次 URL 变更（点卡片 → 写 ?asset=、点筛选）都会让路由器把文档
+            滚回顶部，表现就是「点一下就跳回页面顶部」。 */}
+        <main
+          className={cn(
+            "flex min-w-0 flex-1 flex-col max-[980px]:pb-[58px]",
+            fixedViewport && "h-svh min-h-0 overflow-hidden"
+          )}
+        >
           {/* 全局顶部状态栏：sticky 钉在视口顶，只在有任务时占位 */}
           <TaskBar />
           <Outlet />

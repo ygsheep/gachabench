@@ -40,6 +40,9 @@ function AssetsRoute() {
         void navigate({
           search: (prev) => ({ ...prev, ...patch }),
           replace: true,
+          // 只是改 URL 上的筛选 / 打开某张卡，不是换页面：绝不能把视口滚回顶部。
+          // 滚动复位只应该发生在「用户真的换了筛选」时，由列表内部自己处理。
+          resetScroll: false,
         })
       }}
     />

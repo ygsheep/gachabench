@@ -10,7 +10,7 @@ export type LegacyKey =
 
 export const LEGACY_HASH_TARGETS: Record<LegacyKey, string> = {
   board: "/review",
-  split: "/prompts",
+  split: "/produce?tab=split",
   locator: "/prompts",
   assets: "/assets",
   library: "/assets?collection=novel",

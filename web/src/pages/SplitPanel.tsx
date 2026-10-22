@@ -30,10 +30,13 @@ import type {
 export function SplitPanel({
   seg: routeSeg,
   onSegChange,
+  bare = false,
 }: {
-  /** 来自 /prompts/$seg；没有时用 store 里的上次段号 */
+  /** 来自 URL（/produce?tab=split&seg=04）；没有时用 store 里的上次段号 */
   seg?: string
   onSegChange?: (seg: string) => void
+  /** 嵌在「制作」页里时由外层给标题，自己不重复画一个 h1 */
+  bare?: boolean
 } = {}) {
   const storeSeg = useApp((s) => s.seg)
   const setStoreSeg = useApp((s) => s.setSeg)
@@ -237,23 +240,29 @@ export function SplitPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex flex-wrap items-end gap-x-3.5 gap-y-2 px-6 pb-3.5 pt-5">
-        <div className="max-w-[82ch]">
-          <h1 className="text-[19px] font-semibold leading-tight">拆分台</h1>
-          <p className="pt-0.5 text-[12.5px] text-ash">
-            15 秒一次出片容易崩尾巴。拆成 3 块跑，每块只盯一个镜组；切点只落在镜的自然边界。
-          </p>
-        </div>
-        <span className="flex-1" />
-        {segsQ.isPending && <span className="text-[11.5px] text-ash-dim">读段号…</span>}
-      </header>
+      {!bare && (
+        <header className="flex flex-wrap items-end gap-x-3.5 gap-y-2 px-6 pb-3.5 pt-5">
+          <div className="max-w-[82ch]">
+            <h1 className="text-[19px] font-semibold leading-tight">拆分台</h1>
+            <p className="pt-0.5 text-[12.5px] text-ash">
+              15 秒一次出片容易崩尾巴。拆成 3 块跑，每块只盯一个镜组；切点只落在镜的自然边界。
+            </p>
+          </div>
+          <span className="flex-1" />
+          {segsQ.isPending && <span className="text-[11.5px] text-ash-dim">读段号…</span>}
+        </header>
+      )}
 
       <div className="flex flex-col gap-3.5 px-6 pb-11">
         <RunParamsBar value={runParams} onChange={setRunParams} />
 
         <Card title="选段" desc="段号来自提示词目录里的 NN_正片_第N段_15s.md，以及卡池里已经跑过的片段。">
           {!segments.length && (
-            <p className="text-[12.5px] text-ash">没有扫到任何段。先确认工作区里的 提示词/ 有 md 文件。</p>
+            <p className="text-[12.5px] leading-relaxed text-ash">
+              没有扫到能拆的段。拆分只认 <span className="font-mono text-paper">NN_正片_第N段_15s.md</span>{" "}
+              这种带 §④ <span className="font-mono">[Shot N]</span> 的旧体例；
+              三段式提示词本身已经是切好的段，不需要再拆。
+            </p>
           )}
           <div className="flex flex-wrap gap-2">
             {segments.map((s) => (

@@ -1,5 +1,5 @@
 import { createRoute } from "@tanstack/react-router"
-import { SplitPanel } from "@/pages/SplitPanel"
+import { PromptStudio } from "@/pages/PromptStudio"
 import { rootRoute } from "./root"
 
 export const promptsRoute = createRoute({
@@ -11,9 +11,9 @@ export const promptsRoute = createRoute({
 function PromptsRoute() {
   const navigate = promptsRoute.useNavigate()
   return (
-    <SplitPanel
+    <PromptStudio
       onSegChange={(seg) => {
-        void navigate({ to: "/prompts/$seg", params: { seg } })
+        void navigate({ to: "/prompts/$seg", params: { seg }, replace: true })
       }}
     />
   )

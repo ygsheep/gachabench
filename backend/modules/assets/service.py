@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from pathlib import Path
 from typing import Optional
@@ -17,6 +18,8 @@ from modules.platform.ids import ulid
 from modules.system.events import bus
 
 _TERMINAL = {"done", "error", "cancelled"}
+
+log = logging.getLogger("gachabench.index")
 
 
 class ScanManager:
@@ -100,7 +103,8 @@ class ScanManager:
         try:
             migrated = ensure_schema(root)
         except Exception as exc:  # noqa: BLE001
-            print(f"[index] schema 升级失败：{exc}")
+            # 这里必须留日志：schema 没建好，资产接口会连着 500，静默会把排查成本拉满
+            log.exception("[index] schema 升级失败（%s）：%s", root, exc)
             return
         with session_scope(root) as session:
             count = session.scalar(select(func.count()).select_from(IndexAsset)) or 0
@@ -152,7 +156,7 @@ class ScanManager:
         except Exception as exc:  # noqa: BLE001
             status = "error"
             stats = {"error": str(exc)}
-            print(f"[index] 扫描失败：{exc}")
+            log.exception("[index] 扫描失败：%s", exc)
         finally:
             try:
                 with session_scope(root) as session:
@@ -162,7 +166,7 @@ class ScanManager:
                         run.finished_at = now_iso()
                         run.stats_json = json.dumps(stats, ensure_ascii=False)
             except Exception as exc:  # noqa: BLE001
-                print(f"[index] 写扫描状态失败：{exc}")
+                log.warning("[index] 写扫描状态失败：%s", exc)
 
             bus.publish(
                 "index.progress",
