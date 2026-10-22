@@ -116,6 +116,46 @@ class IndexDir(Base):
     scanned_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
 
 
+class OperationPlan(Base):
+    """P2 计划 / 应用 / 回滚三态。
+
+    payload_json 存归一化后的请求，base_json 存计划时刻的哈希与 mtime 快照，
+    result_json 存计划差异（files/blocked/stats）与 apply 结果。
+    """
+
+    __tablename__ = "operation_plans"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    base_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="planned")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+    expires_at: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    applied_at: Mapped[str | None] = mapped_column(Text)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+Index("ix_operation_plans_status", OperationPlan.status)
+Index("ix_operation_plans_created", OperationPlan.created_at)
+
+
+class TrashEntry(Base):
+    """回收站条目：文件移到 .gachabench/trash 后保留原路径与时间。"""
+
+    __tablename__ = "trash_entries"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    asset_id: Mapped[str] = mapped_column(Text, nullable=False)
+    original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    trash_path: Mapped[str] = mapped_column(Text, nullable=False)
+    deleted_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+    restored_at: Mapped[str | None] = mapped_column(Text)
+
+
+Index("ix_trash_entries_asset", TrashEntry.asset_id)
+
+
 class OpLog(Base):
     __tablename__ = "op_log"
 

@@ -266,6 +266,15 @@ def scan_workspace(
         session.flush()
         search.rebuild_fts(session)
 
+    # P2：资产表落定后刷新引用表。引用扫描失败不能拖垮索引，只留日志。
+    try:
+        from modules.assets.refs import scan_refs
+
+        with session_scope(root) as session:
+            scan_refs(root, session)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[index] 引用扫描失败：{exc}")
+
     stats["elapsed_ms"] = int((time.monotonic() - started) * 1000)
     return stats
 

@@ -186,6 +186,7 @@ def _include_routers() -> None:
         system, config_api, export, library, search,
     )
     from modules.assets.api import media_router as asset_media_router, router as asset_index_router
+    from modules.assets.ops_api import router as asset_ops_router
     from modules.system.events import router as events_router
 
     for router in (
@@ -203,6 +204,8 @@ def _include_routers() -> None:
         workflows.router,
         # 旧资产路由先挂：/groups、/target、/upload、/file 不被 /{asset_id} 吞掉
         assets.router,
+        # P2 操作路由必须先于资产索引的 /{asset_id}，否则 duplicates 会被当成详情
+        asset_ops_router,
         asset_index_router,
         asset_media_router,
         events_router,

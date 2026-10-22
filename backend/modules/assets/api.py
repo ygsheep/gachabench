@@ -40,6 +40,7 @@ BUILTIN_COLLECTIONS: list[tuple[str, str, dict]] = [
     ("missing", "已丢失", {"status": "missing"}),
     ("unreferenced", "未被引用", {"unreferenced": True}),
     ("large", "大文件", {"min_size": 50 * 1024 * 1024}),
+    ("trashed", "回收站", {"status": "trashed"}),
 ]
 
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")

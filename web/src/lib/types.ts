@@ -709,3 +709,151 @@ export interface AssetChangedEvent {
   status: string
   stats: Record<string, unknown>
 }
+
+// ---------------------------------------------------------------------------
+// P2 文件操作 / 回收站 / 重复文件
+// ---------------------------------------------------------------------------
+
+/** 计划类型：改名 / 移动 / 删除 */
+export type AssetOpsKind = "rename" | "move" | "delete"
+
+/** POST /api/assets/operations/plan 的请求体（字段按 kind 取） */
+export interface OpsPlanBody {
+  kind: AssetOpsKind
+  asset_id?: string
+  new_name?: string
+  asset_ids?: string[]
+  dest_dir?: string
+}
+
+export interface OpsPlanStats {
+  assets: number
+  files: number
+  refs: number
+}
+
+/** 计划里一个将被改写的引用文件 */
+export interface OpsPlanFile {
+  file_path: string
+  line: number | null
+  kind: string
+  before: string
+  after: string
+  selected: boolean
+  encoding: string
+  refs: number
+}
+
+/** 计划里不可执行的资产（例如目标名冲突） */
+export interface OpsPlanBlocked {
+  asset_id: string
+  path: string
+  reason: string
+}
+
+export interface OpsMoveResult {
+  asset_id: string
+  from: string
+  to: string
+  sha256: string | null
+  size: number
+  mtime: number
+}
+
+export interface OpsTrashResult {
+  asset_id: string
+  from: string
+  to: string
+}
+
+export interface OpsTextResult {
+  file_path: string
+  backup_rel: string
+  sha256: string | null
+  size: number
+  mtime: number
+}
+
+/** apply 之后 result 里的实际动作清单 */
+export interface OpsApplyResult {
+  moves: OpsMoveResult[]
+  trashed: OpsTrashResult[]
+  texts: OpsTextResult[]
+  stats: OpsPlanStats
+}
+
+export interface OpsPlanPayload {
+  asset_id?: string
+  old_name?: string
+  new_name?: string
+  asset_ids?: string[]
+  dest_dir?: string
+}
+
+/** 计划接口（plan / apply / rollback / detail）的统一返回 */
+export interface OpsPlan {
+  id: string
+  kind: AssetOpsKind
+  status: string
+  created_at: string
+  expires_at: string
+  applied_at: string | null
+  payload: OpsPlanPayload
+  stats: OpsPlanStats
+  files: OpsPlanFile[]
+  blocked: OpsPlanBlocked[]
+  result: OpsApplyResult | null
+}
+
+/** GET /api/trash 的一项（以 backend/modules/assets/trash.py 的实际返回为准） */
+export interface TrashEntry {
+  id: string
+  asset_id: string
+  name: string
+  original_path: string
+  trash_path: string
+  deleted_at: string
+  size: number
+  ext: string
+  media_kind: string
+  sha256: string | null
+}
+
+export interface TrashListResp {
+  items: TrashEntry[]
+  total: number
+}
+
+export interface TrashRestoreResp {
+  ok: boolean
+  id: string
+  asset_id: string
+  path: string
+  name: string
+  status: string
+}
+
+export interface TrashPurgeResp {
+  ok: boolean
+  id: string
+  asset_id: string
+}
+
+/** GET /api/assets/duplicates 的一组（sha256 相同） */
+export interface DuplicateGroup {
+  sha256: string
+  count: number
+  size: number
+  items: IndexAssetItem[]
+}
+
+export interface DuplicatesResp {
+  groups: DuplicateGroup[]
+  total: number
+}
+
+/** GET /api/assets/unreferenced */
+export interface UnreferencedResp {
+  items: IndexAssetItem[]
+  total: number
+}

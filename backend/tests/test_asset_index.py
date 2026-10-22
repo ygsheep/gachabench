@@ -189,7 +189,9 @@ class TestApi(IndexCase):
         self.assertEqual(counts["asset"], 1)
         self.assertEqual(counts["storyboard"], 1)
         names = {c["id"] for c in body["collections"]}
-        self.assertEqual(names, {"recent", "missing", "unreferenced", "large"})
+        self.assertEqual(
+            names, {"recent", "missing", "unreferenced", "large", "trashed"}
+        )
 
     def test_patch_meta_persists(self):
         self.write("素材/白陌_参考.png")
