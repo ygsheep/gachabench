@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Download,
   Keyboard,
+  List,
   Pause,
   Play,
   Repeat,
@@ -44,24 +45,28 @@ export function Reviewer({
   seg,
   chunk,
   takes,
+  blocks,
   initialId,
   shotTags,
   rejectTags,
   onClose,
-  onSwitchBlock,
+  onJump,
 }: {
   seg: string
   chunk: string
   takes: Card[]
+  /** 本段所有「有候选」的块，按块序排好 —— 上一个/下一个和抽屉都靠它导航 */
+  blocks: { chunk: string; takes: Card[] }[]
   initialId: number
   shotTags: string[]
   rejectTags: string[]
   onClose: () => void
-  onSwitchBlock: (dir: -1 | 1) => void
+  onJump: (chunk: string) => void
 }) {
   const [id, setId] = useState(initialId)
   const [tab, setTab] = useState<Tab>("prompt")
   const [sheet, setSheet] = useState(false)
+  const [drawer, setDrawer] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [rejectNote, setRejectNote] = useState("")
   const [copyToFinal, setCopyToFinal] = useState(false)
@@ -112,6 +117,16 @@ export function Reviewer({
   )
   const card: Card | undefined = takes[idx] ?? takes[0]
   const dur = card?.duration ?? 5
+
+  /* 块导航：本段块序列里的当前位置 + 上/下目标。用块码（00/01…）当路标，
+     不用「上一块/下一块」这种空话——看到下一个块的编号，才知道要切到哪去。 */
+  const bi = Math.max(
+    0,
+    blocks.findIndex((b) => b.chunk === chunk)
+  )
+  const blockCount = blocks.length
+  const prevChunk = blockCount > 1 ? blocks[(bi - 1 + blockCount) % blockCount].chunk : ""
+  const nextChunk = blockCount > 1 ? blocks[(bi + 1) % blockCount].chunk : ""
 
   /* 切候选：停住、回到开头，等你看清楚再放 */
   useEffect(() => {
@@ -246,11 +261,11 @@ export function Reviewer({
           break
         case "ArrowUp":
           e.preventDefault()
-          onSwitchBlock(-1)
+          if (blockCount > 1) onJump(prevChunk)
           break
         case "ArrowDown":
           e.preventDefault()
-          onSwitchBlock(1)
+          if (blockCount > 1) onJump(nextChunk)
           break
         case ",":
           step(-FRAME)
@@ -281,14 +296,19 @@ export function Reviewer({
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [takes, idx, toggle, step, classify, onClose, onSwitchBlock, sheet])
+  }, [takes, idx, toggle, step, classify, onClose, onJump, prevChunk, nextChunk, blockCount, sheet])
 
   if (!card) return null
 
   const rejectList = picked.length ? picked : card.reject_tags
 
   return (
-    <div className="fixed inset-0 z-60 flex flex-col bg-void" role="dialog" aria-modal="true" aria-label="审片器">
+    <div
+      className="fixed inset-0 z-60 flex flex-col bg-void"
+      role="dialog"
+      aria-modal="true"
+      aria-label="审片器"
+    >
       <header className="flex flex-none flex-wrap items-center gap-2.5 border-b border-rule-soft px-5 py-3">
         <button
           type="button"
@@ -312,6 +332,42 @@ export function Reviewer({
           </Chip>
         ))}
         <span className="flex-1" />
+        {/* 块切换：上一个 / 下一个直接给出目标块号（00 → 01），中间的 N/M 是当前位置。
+            候选条（同一块里的几条）仍是右边那组「候选 x/y」，两套导航各管各的。 */}
+        <div className="flex items-center gap-0.5 rounded-ctl border border-rule bg-cell p-0.5">
+          <button
+            type="button"
+            onClick={() => onJump(prevChunk)}
+            disabled={blockCount <= 1}
+            title={blockCount > 1 ? `上一个块：${chunkLabel(prevChunk)}` : "只有这一个块"}
+            className="inline-flex h-6 items-center gap-0.5 rounded px-1.5 text-[11.5px] text-ash transition-colors hover:bg-hi hover:text-paper disabled:opacity-40"
+          >
+            <ChevronLeft className="size-3.5" />
+            <span className="font-mono">{blockCount > 1 ? chunkLabel(prevChunk) : "上"}</span>
+          </button>
+          <span className="px-1 font-mono text-[11px] text-ash-dim">
+            {blockCount ? `${bi + 1}/${blockCount}` : "0/0"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onJump(nextChunk)}
+            disabled={blockCount <= 1}
+            title={blockCount > 1 ? `下一个块：${chunkLabel(nextChunk)}` : "只有这一个块"}
+            className="inline-flex h-6 items-center gap-0.5 rounded px-1.5 text-[11.5px] text-ash transition-colors hover:bg-hi hover:text-paper disabled:opacity-40"
+          >
+            <span className="font-mono">{blockCount > 1 ? chunkLabel(nextChunk) : "下"}</span>
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDrawer(true)}
+          title="块目录"
+          className="inline-flex h-7 items-center gap-1.5 rounded-ctl px-2 text-[12.5px] text-ash transition-colors hover:bg-cell hover:text-paper"
+        >
+          <List className="size-3.5" />
+          块 {blockCount ? `${bi + 1}/${blockCount}` : "—"}
+        </button>
         <span className="font-mono text-[12px] text-ash">
           候选 <span className="text-paper">{idx + 1}</span>/{takes.length}
         </span>
@@ -666,6 +722,63 @@ export function Reviewer({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 块目录抽屉：本段所有块一列排开，当前块高亮，点哪块跳到哪块。
+          缩略图复用 FilmCell（悬停即预览），和左侧候选列同一种读法。 */}
+      {drawer && (
+        <>
+          <div className="absolute inset-0 z-10 bg-black/45" onClick={() => setDrawer(false)} />
+          <aside className="absolute inset-y-0 right-0 z-20 flex w-[300px] flex-col border-l border-rule-soft bg-panel">
+            <header className="flex flex-none items-center gap-2 border-b border-rule-soft px-3.5 py-2.5">
+              <span className="text-[12.5px] text-paper">本段 {blockCount} 个块</span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                onClick={() => setDrawer(false)}
+                aria-label="关闭块目录"
+                className="grid size-7 place-items-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper"
+              >
+                <X className="size-3.5" />
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <div className="flex flex-col gap-2.5">
+                {blocks.map((b, i) => (
+                  <div
+                    key={b.chunk}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setDrawer(false)
+                      onJump(b.chunk)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        setDrawer(false)
+                        onJump(b.chunk)
+                      }
+                    }}
+                    className={cn(
+                      "cursor-pointer rounded-cell border p-2 transition-colors",
+                      i === bi
+                        ? "border-wash-line bg-wash"
+                        : "border-rule-soft bg-cell hover:bg-hi"
+                    )}
+                  >
+                    <FilmCell card={b.takes[0]} variant="take" index={i + 1} active={i === bi} />
+                    <span className="mt-1.5 flex items-baseline gap-2 px-0.5">
+                      <span className="font-mono text-[12px] text-paper">{chunkLabel(b.chunk)}</span>
+                      <span className="text-[10.5px] text-ash-dim">{b.takes.length} 条</span>
+                      {i === bi && <span className="ml-auto text-[10px] text-ash-dim">正在看</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </>
       )}
     </div>
   )

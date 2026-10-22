@@ -186,25 +186,20 @@ export function GachaBoard({
     setReview({ seg, chunk, initialId: cardId })
   }
 
-  /** ↑↓ 在块之间走 */
-  function switchBlock(dir: -1 | 1) {
-    if (!review) return
+  /* 本段所有「有候选」的块（按块序排好）。块导航在审片器里做，
+     这里只算一次列表交给它，别让两处各写一套 wrap 逻辑。 */
+  const segBlocks = useMemo(() => {
+    if (!review) return []
     const row = rows.find((r) => r.seg === review.seg)
-    if (!row) return
-    const withTakes = row.blocks.filter((b) => b.takes.length)
-    if (!withTakes.length) return
-    const i = withTakes.findIndex((b) => b.chunk === review.chunk)
-    const next = withTakes[(i + dir + withTakes.length) % withTakes.length]
-    setReview({ seg: review.seg, chunk: next.chunk, initialId: next.takes[0].id })
-  }
+    return row ? row.blocks.filter((b) => b.takes.length) : []
+  }, [rows, review])
 
   const reviewData = useMemo(() => {
     if (!review) return null
-    const row = rows.find((r) => r.seg === review.seg)
-    const block = row?.blocks.find((b) => b.chunk === review.chunk)
+    const block = segBlocks.find((b) => b.chunk === review.chunk)
     if (!block || !block.takes.length) return null
     return { takes: block.takes, shots: block.takes[0].tags }
-  }, [rows, review])
+  }, [segBlocks, review])
 
   if (!workspace) return null
 
@@ -425,11 +420,15 @@ export function GachaBoard({
           seg={review.seg}
           chunk={review.chunk}
           takes={reviewData.takes}
+          blocks={segBlocks}
           initialId={review.initialId}
           shotTags={reviewData.shots}
           rejectTags={rejectTags}
           onClose={() => setReview(null)}
-          onSwitchBlock={switchBlock}
+          onJump={(chunk) => {
+            const b = segBlocks.find((x) => x.chunk === chunk)
+            setReview({ seg: review.seg, chunk, initialId: b?.takes[0]?.id ?? 0 })
+          }}
         />
       )}
 
