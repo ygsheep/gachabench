@@ -18,6 +18,7 @@ import {
   Images,
   LayoutGrid,
   Plus,
+  Play,
   RefreshCw,
   RotateCcw,
   Search,
@@ -131,6 +132,9 @@ export function AssetIndex({
   const [opsTarget, setOpsTarget] = useState<AssetOpsTarget | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
+  /* 双击预览只记被点的那一项，关掉即清空（不复用选中态：预览是「打开看一眼」，
+     不该改变右侧详情面板在讲谁） */
+  const [preview, setPreview] = useState<IndexAssetItem | null>(null)
 
   /* ---------------- 集合 / 角色 ---------------- */
   const collectionsQ = useQuery({
@@ -779,6 +783,7 @@ export function AssetIndex({
               multi={multi}
               onOpen={(id) => onSearchChange({ asset: id })}
               onToggleCheck={toggleMulti}
+              onPreview={setPreview}
               onCleanOlder={(ids) => openOps("delete", ids)}
             />
           ) : trashedMode ? (
@@ -879,6 +884,7 @@ export function AssetIndex({
                           else onSearchChange({ asset: item.id })
                         }}
                         onToggleCheck={toggleMulti}
+                        onPreview={setPreview}
                         onUpload={() =>
                           setDlg({
                             mode: "attach",
@@ -919,6 +925,7 @@ export function AssetIndex({
                         else onSearchChange({ asset: item.id })
                       }}
                       onToggleCheck={() => toggleMulti(item.id)}
+                      onPreview={setPreview}
                     />
                   ))}
                 </div>
@@ -1062,6 +1069,8 @@ export function AssetIndex({
         />
       )}
 
+      {preview && <MediaPreview item={preview} onClose={() => setPreview(null)} />}
+
       {opsTarget && (
         <AssetOpsDialog
           target={opsTarget}
@@ -1090,6 +1099,7 @@ function SubjectCard({
   dropping,
   onCell,
   onToggleCheck,
+  onPreview,
   onUpload,
   onDropFiles,
 }: {
@@ -1102,6 +1112,7 @@ function SubjectCard({
   dropping: boolean
   onCell: (item: IndexAssetItem, e: React.MouseEvent) => void
   onToggleCheck: (id: string) => void
+  onPreview: (item: IndexAssetItem) => void
   onUpload: () => void
   onDropFiles: (files: File[]) => void
 }) {
@@ -1166,6 +1177,7 @@ function SubjectCard({
               checked={multi.has(it.id)}
               onOpen={(e) => onCell(it, e)}
               onToggleCheck={() => onToggleCheck(it.id)}
+              onPreview={onPreview}
             />
           ))}
           {audios.map((it) => (
@@ -1176,6 +1188,7 @@ function SubjectCard({
               checked={multi.has(it.id)}
               onOpen={(e) => onCell(it, e)}
               onToggleCheck={() => onToggleCheck(it.id)}
+              onPreview={onPreview}
             />
           ))}
           <DropTile />
@@ -1243,32 +1256,56 @@ function AssetCell({
   checked,
   onOpen,
   onToggleCheck,
+  onPreview,
 }: {
   item: IndexAssetItem
   selected: boolean
   checked: boolean
   onOpen: (e: React.MouseEvent) => void
   onToggleCheck: () => void
+  onPreview: (item: IndexAssetItem) => void
 }) {
   const missing = item.status === "missing"
   // 音频格：黑底区不放缩略图，放声部块（等宽竖条 = 材质，点亮段 = 真实进度）
   const isAudio = item.media_kind === "audio" && !!item.media_url
+  /* 双击预览只对「能看的」开放：图和视频。音频已经有悬停试听，再开一层大窗反而多余。
+     单击仍然是选中（右键菜单、批量操作都挂在选中上），双击是「打开看一眼」——两件事。 */
+  const canPreview =
+    !missing && !!item.media_url && (item.media_kind === "video" || item.media_kind === "image")
   const ap = useAudioPlayer(item.media_url)
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
+      onDoubleClick={
+        canPreview
+          ? (e) => {
+              e.stopPropagation()
+              onPreview(item)
+            }
+          : undefined
+      }
       onMouseEnter={isAudio ? ap.play : undefined}
       onMouseLeave={isAudio ? ap.stop : undefined}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter") {
+          e.preventDefault()
+          if (canPreview) onPreview(item)
+          else onOpen(e as unknown as React.MouseEvent)
+        } else if (e.key === " ") {
           e.preventDefault()
           onOpen(e as unknown as React.MouseEvent)
         }
       }}
-      title={isAudio ? "悬停即试听 · 点固定钮钉住播放" : undefined}
+      title={
+        isAudio
+          ? "悬停即试听 · 点固定钮钉住播放"
+          : canPreview
+            ? "双击预览"
+            : undefined
+      }
       className={cn(
         "group relative h-[168px] cursor-pointer overflow-hidden rounded-cell border bg-cell transition-colors",
         selected
@@ -1300,7 +1337,13 @@ function AssetCell({
             className={cn("h-full w-full object-cover", missing && "opacity-40")}
           />
         ) : (
-          <span className="grid h-full w-full place-items-center text-ash-dim">
+          /* 视频没有封面时，胶片图标退成背景水印，把中间让给播放圆钮 */
+          <span
+            className={cn(
+              "grid h-full w-full place-items-center",
+              item.media_kind === "video" ? "text-white/15" : "text-ash-dim"
+            )}
+          >
             <KindIcon kind={item.media_kind} />
           </span>
         )}
@@ -1308,6 +1351,24 @@ function AssetCell({
         <span className="gb-pill left-1.5 top-1.5" data-on="1">
           {kindLabel(item.media_kind)}
         </span>
+        {/* 视频默认没有封面（本机没装 ffmpeg，抽不了帧），格子里只剩一个胶片图标，
+            光靠「双击预览」这个隐藏手势没人猜得到。这里给一个看得见的入口：
+            圆钮常驻（不是 hover 才出现，触屏/不悬停也能发现），点它直接开预览，
+            同时 stopPropagation —— 不然会顺带把这一项选中。 */}
+        {item.media_kind === "video" && canPreview && (
+          <button
+            type="button"
+            aria-label={`预览视频 ${item.name}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onPreview(item)
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="absolute left-1/2 top-1/2 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/45 bg-black/50 text-white/85 transition-all hover:border-white hover:bg-black/70 hover:text-white group-hover:scale-[1.06]"
+          >
+            <Play className="size-4 translate-x-[1px]" fill="currentColor" strokeWidth={0} />
+          </button>
+        )}
         {missing && (
           <span className="gb-pill bottom-1.5 left-1.5" data-on="0">
             已丢失
@@ -1344,6 +1405,82 @@ function AssetCell({
         >
           {item.subject || item.dir_path || "—"} · {humanSize(item.size)}
         </p>
+      </div>
+    </div>
+  )
+}
+
+/* 双击预览：整块遮罩 + 面板，和提示词工程单镜弹窗同一套规矩——
+   高度按百分比封顶（h-[92%]），媒体放 object-contain 自己留黑边，
+   面板永远不越出视口；Esc / 点遮罩 / 点右上角都能关。
+   视频直接吃 /api/media（Starlette FileResponse 支持 Range），所以能拖进度条。 */
+function MediaPreview({ item, onClose }: { item: IndexAssetItem; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  const isVideo = item.media_kind === "video"
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4 sm:p-6"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`预览 ${item.name}`}
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-[92%] w-full max-w-[1120px] flex-col overflow-hidden rounded-panel border border-rule bg-panel shadow-[0_24px_80px_rgba(0,0,0,.65)]"
+      >
+        <header className="flex shrink-0 items-center gap-2.5 border-b border-rule-soft px-4 py-2.5">
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-paper" title={item.name}>
+            {item.name}
+          </span>
+          <span className="shrink-0 font-mono text-[10.5px] text-ash-dim">
+            {item.width && item.height ? `${item.width}×${item.height} · ` : ""}
+            {humanSize(item.size)}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭预览"
+            className="grid size-7 flex-none place-items-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper"
+          >
+            <X className="size-3.5" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 bg-black">
+          {isVideo ? (
+            <video
+              key={item.id}
+              src={item.media_url}
+              controls
+              autoPlay
+              playsInline
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            <img
+              key={item.id}
+              src={item.media_url}
+              alt={item.name}
+              className="h-full w-full object-contain"
+            />
+          )}
+        </div>
+
+        <footer className="flex shrink-0 items-center gap-2 border-t border-rule-soft px-4 py-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-ash-dim" title={item.path}>
+            {item.path}
+          </span>
+          <span className="shrink-0 text-[10.5px] text-ash-dim">Esc 关闭</span>
+        </footer>
       </div>
     </div>
   )
@@ -1824,6 +1961,7 @@ function DuplicatesPanel({
   multi,
   onOpen,
   onToggleCheck,
+  onPreview,
   onCleanOlder,
 }: {
   groups: DuplicateGroup[]
@@ -1833,6 +1971,7 @@ function DuplicatesPanel({
   multi: Set<string>
   onOpen: (id: string) => void
   onToggleCheck: (id: string) => void
+  onPreview: (item: IndexAssetItem) => void
   onCleanOlder: (ids: string[]) => void
 }) {
   if (pending) {
@@ -1917,6 +2056,7 @@ function DuplicatesPanel({
                       else onOpen(item.id)
                     }}
                     onToggleCheck={() => onToggleCheck(item.id)}
+                    onPreview={onPreview}
                   />
                   <span className="gb-pill right-1.5 bottom-1.5" data-on={i === 0 ? "1" : "0"}>
                     {i === 0 ? "最新" : "旧副本"}
