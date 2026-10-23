@@ -7,6 +7,8 @@ export interface AssetsSearch {
   category?: string
   collection?: string
   q?: string
+  /** 一级目录 tab：`素材`（当前集要用的）或 `资产`（全量资产库）。 */
+  dir?: string
   asset?: string
   /** 旧 hash 入口 `collection=novel&panel=search` 兼容用，页面不消费 */
   panel?: string
@@ -24,6 +26,7 @@ export const assetsRoute = createRoute({
     category: str(search.category),
     collection: str(search.collection),
     q: str(search.q),
+    dir: str(search.dir),
     asset: str(search.asset),
     panel: str(search.panel),
   }),

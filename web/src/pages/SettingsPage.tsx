@@ -2,11 +2,13 @@ import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
-import { FolderOpen, RotateCw, Save } from "lucide-react"
+import { FolderOpen, Pencil, RotateCw, Save } from "lucide-react"
 import { cn } from "cn"
 import { Switch } from "@/components/ui/switch"
+import { WorkspaceNameDialog } from "@/components/WorkspaceNameDialog"
 import { api } from "@/lib/api"
 import { PREFS_KEY, loadPrefs, resetPrefs, writeJSON, type Prefs } from "@/lib/prefs"
+import { wsTitle } from "@/lib/workspace"
 import type { ConfigResp, FolderPickerCapability, FolderKey, WorkflowsResp } from "@/lib/types"
 
 const OUTLINE_BTN =
@@ -75,6 +77,8 @@ export function SettingsPage({ workspace }: { workspace: string | null }) {
       </header>
 
       <div className="flex flex-col gap-4 px-6 pb-11">
+        <ProjectSection cfg={cfgQ.data} workspace={workspace} />
+        <WatchSection cfg={cfgQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })} />
         <ConnectionSection cfg={cfgQ.data} canPick={canPick} onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })} />
         <RunSection cfg={cfgQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })} />
         <WorkflowSection cfg={cfgQ.data} workflows={wfQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["workflows", "config"] })} />
@@ -139,6 +143,114 @@ function SaveBtn({ busy, onClick }: { busy: boolean; onClick: () => void }) {
       {busy ? <RotateCw className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
       {busy ? "保存中…" : "保存"}
     </button>
+  )
+}
+
+/**
+ * 项目：显示名可改，目录名只读。
+ *
+ * 为什么不给「改目录名」的按钮：`name` 是目录名 + 库里 workspace 列的键 + 接口路径段，
+ * 改它要先后端松手关库、搬整个目录、再改写五张表；任何一步失败，卡池就空了。
+ * 而「换个显示名」只是配置里的一个字段，改它零风险（见 WorkspaceNameDialog）。
+ */
+function ProjectSection({ cfg, workspace }: { cfg: ConfigResp; workspace: string | null }) {
+  const [open, setOpen] = useState(false)
+  const ws = cfg.workspaces.find((w) => w.name === workspace) ?? null
+  if (!ws) return null
+  const custom = (ws.label ?? "").trim().length > 0
+
+  return (
+    <>
+      <Section
+        title="项目"
+        desc="显示名全站显示，随便改；目录名是磁盘上的真实文件夹，也是卡池的键，这里只读。"
+        aside={
+          <button type="button" onClick={() => setOpen(true)} className={OUTLINE_BTN}>
+            <Pencil className="size-3.5" />
+            改显示名
+          </button>
+        }
+      >
+        <Field label="显示名" hint="就是左侧栏那一个名字；留空则回落到目录名。">
+          <span className="flex items-center gap-2 text-[13px]">
+            {wsTitle(ws)}
+            {custom && (
+              <span className="rounded border border-rule px-1.5 py-px text-[10.5px] text-ash-dim">
+                自定义
+              </span>
+            )}
+          </span>
+        </Field>
+        <Field label="目录名" hint="cards.db 里 workspace 列的键，也是所有接口的路径段。">
+          <span className="font-mono text-[12px] text-ash">{ws.name}</span>
+        </Field>
+        <Field label="根目录">
+          <span className="break-all font-mono text-[11.5px] text-ash-dim">{ws.root}</span>
+        </Field>
+      </Section>
+      {open && <WorkspaceNameDialog ws={ws} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
+/**
+ * 卡池刷新：实时读盘的节流阀。
+ *
+ * 「实时」不等于「一直扫」：后台每 N 秒只 stat 一次文件指纹（大小 + 修改时间），
+ * 只有新增/变化的文件才跑 ffprobe 入库；没变化时这一轮零写入。所以间隔可以给得很小
+ * 也不心疼，但不能给到 0（人手没那么快放片子，纯属白扫）。
+ */
+function WatchSection({ cfg, onSaved }: { cfg: ConfigResp; onSaved: () => void }) {
+  const cur = cfg.watch ?? { enabled: true, interval_sec: 8, request_gap_sec: 1.5 }
+  const [enabled, setEnabled] = useState(cur.enabled)
+  const [text, setText] = useState(String(cur.interval_sec))
+
+  const num = Number(text)
+  const valid = Number.isFinite(num) && num >= 2 && num <= 120
+  const dirty = enabled !== cur.enabled || (valid && num !== cur.interval_sec)
+
+  const save = useMutation({
+    mutationFn: () => api.put<ConfigResp>("/api/config", { watch: { enabled, interval_sec: num } }),
+    onSuccess: () => {
+      onSaved()
+      toast.success("卡池刷新已保存", {
+        description: enabled
+          ? `每 ${num} 秒看一眼盘，有新片才登记`
+          : "已关闭：只在打开审片台 / 手动点「重新扫描」时更新",
+      })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Section
+      title="卡池刷新"
+      desc="后台定时看一眼 草稿/ 与 生成/ 的文件指纹（大小 + 修改时间，不跑 ffprobe）；只有新片或被改过的片才探测入库，没变化时零写入。"
+      aside={dirty ? <SaveBtn busy={save.isPending} onClick={() => save.mutate()} /> : undefined}
+    >
+      <div className="flex items-center gap-3">
+        <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="自动刷新卡池" />
+        <span className="text-[12.5px] text-ash">自动发现新片</span>
+      </div>
+      <Field
+        label="间隔（秒）"
+        hint="2–120。太短没意义（人手放不了那么快），太长会像「还是看不到新片」。"
+      >
+        <div className="flex items-center gap-2">
+          <input
+            className={cn(INPUT, "max-w-[110px]")}
+            value={text}
+            inputMode="numeric"
+            onChange={(e) => setText(e.target.value)}
+            spellCheck={false}
+            aria-label="刷新间隔秒数"
+          />
+          <span className="text-[11.5px] text-ash-dim">
+            {valid ? `每 ${num} 秒看一次盘` : "填 2–120 之间的秒数"}
+          </span>
+        </div>
+      </Field>
+    </Section>
   )
 }
 

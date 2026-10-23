@@ -25,9 +25,85 @@ _SCENE_RE = re.compile(r"【场景环境】\s*\n(.+?)(?=\n【|\n```|\Z)", re.DOT
 _ERA_RE = re.compile(r"(\d{4}\s*年[^，。；\n的]{0,16})")
 
 
+# 提示词文件名里的段号前缀。两套命名并存：
+#  老式：`01_15_01_000-015s.md`  → 段号 01（前缀 `01_`）
+#  新式：`07-1_打谷场_视频提示词.md` → 段号 07、子段 1
+#         `08_03_镇上买烟_视频提示词.md` → 段号 08、子段 03
+# 两者段号都在开头两三位数字，跟后面的内容用 `_` 或 `-` 隔开。
+_SEG_PREFIX_RE = re.compile(r"^(\d{1,3})(?:[_-](\d{1,2}))?(?=[_-])")
+# 文件类型：参考图提示词 / 视频提示词 / 三段式 / 其他
+_REF_IMAGE_RE = re.compile(r"参考图|参考图提示词|外景参考图|SD5")
+_VIDEO_RE = re.compile(r"视频提示词|视频")
+
+
 def _prompt_dir(cfg: Config) -> Optional[Path]:
     p = cfg.subdir("prompt")
     return p if p is not None and p.is_dir() else None
+
+
+def _prompt_file_kind(name: str) -> str:
+    """按文件名判断提示词 md 的类型：`ref`（参考图）/ `video`（视频）/ `template` / `other`。"""
+    stem = Path(name).stem
+    if stem.startswith("提示词模板"):
+        return "template"
+    if _REF_IMAGE_RE.search(stem):
+        return "ref"
+    if _VIDEO_RE.search(stem):
+        return "video"
+    if stem.endswith("_三段式"):
+        return "template"
+    return "other"
+
+
+def _prompt_seg_no(name: str) -> Optional[int]:
+    """从提示词文件名里提段号（老式 `01_15_...` → 1，新式 `07-1_...` → 7）。"""
+    m = _SEG_PREFIX_RE.match(Path(name).stem)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
+
+
+def list_segment_files(cfg: Config, seg_no: int) -> list[dict[str, Any]]:
+    """某一段在 `提示词/` 目录里关联的所有 md 文件，按类型分类。
+
+    返回 [{name, kind, sub, scene}]，`kind` ∈ ref/video/template/other。
+    同一「段 + 子段 + 场景」的参考图提示词与视频提示词靠 kind 配对（前端成组展示）。
+    """
+    prompt_dir = _prompt_dir(cfg)
+    if prompt_dir is None:
+        return []
+    out: list[dict[str, Any]] = []
+    for p in sorted(prompt_dir.glob("*.md")):
+        stem = p.stem
+        # 跳过模板与备份/临时目录里的（这里只 glob 顶层，天然不含 _backup 子目录）
+        if stem.startswith("提示词模板"):
+            continue
+        no = _prompt_seg_no(stem)
+        if no != seg_no:
+            continue
+        # 子段与场景：新式命名 `07-1_打谷场` / `08_03_镇上买烟`；老式没有子段/场景。
+        m = _SEG_PREFIX_RE.match(stem)
+        sub = m.group(2) if m and m.group(2) else ""
+        rest = stem[m.end():] if m else stem
+        # 场景 = 去掉类型后缀与杂项后的中间段（`打谷场`、`镇上买烟`），老式给空。
+        # 按「最长优先」清：外景参考图提示词 → 参考图提示词 → 视频提示词 → SD5.0 → 三段式
+        scene = rest
+        for kw in (
+            "外景参考图提示词", "参考图提示词", "视频提示词",
+            "参考图", "SD5.0", "SD5", "三段式",
+        ):
+            scene = scene.replace(kw, "")
+        scene = scene.strip("_- .0123456789")
+        out.append({
+            "name": p.name,
+            "kind": _prompt_file_kind(stem),
+            "sub": sub,
+            "scene": scene,
+        })
+    return out
 
 
 def _storyboard_dir(cfg: Config) -> Optional[Path]:
@@ -68,6 +144,8 @@ def list_segments(cfg: Config) -> list[dict[str, Any]]:
             "status": parsed.get("status"),
             "issues": len(parsed.get("issues") or []),
             "prompt_file": prompt_file,
+            # 这一段在「提示词/」里关联的所有 md（参考图/视频/三段式/其他，按类型分类）
+            "files": list_segment_files(cfg, no),
         })
     out.sort(key=lambda s: (s["ep"], s["no"], s["source_path"]))
     return out

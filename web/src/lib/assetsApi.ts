@@ -19,6 +19,8 @@ export interface AssetsQueryParams {
   category?: string
   collection?: string
   q?: string
+  /** 一级目录前缀过滤：`素材` / `资产`，对应资产页的两个 tab。 */
+  dir?: string
   cursor?: string
   limit?: number
 }
@@ -30,11 +32,13 @@ export function normalizeAssetsParams(params: AssetsQueryParams): AssetsQueryPar
   const category = typeof params.category === "string" ? params.category.trim() : ""
   const collection = typeof params.collection === "string" ? params.collection.trim() : ""
   const q = typeof params.q === "string" ? params.q.trim() : ""
+  const dir = typeof params.dir === "string" ? params.dir.trim() : ""
   const cursor = typeof params.cursor === "string" ? params.cursor.trim() : ""
   if (role) out.role = role
   if (category) out.category = category
   if (collection) out.collection = collection
   if (q) out.q = q
+  if (dir) out.dir = dir
   if (cursor) out.cursor = cursor
   if (typeof params.limit === "number" && Number.isFinite(params.limit) && params.limit > 0) {
     out.limit = Math.floor(params.limit)
@@ -50,6 +54,7 @@ export function buildAssetsQuery(params: AssetsQueryParams): string {
   if (p.category) sp.set("category", p.category)
   if (p.collection) sp.set("collection", p.collection)
   if (p.q) sp.set("q", p.q)
+  if (p.dir) sp.set("dir", p.dir)
   if (p.cursor) sp.set("cursor", p.cursor)
   if (p.limit) sp.set("limit", String(p.limit))
   const qs = sp.toString()

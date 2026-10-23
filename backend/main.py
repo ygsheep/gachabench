@@ -86,6 +86,45 @@ async def _reconcile_loop() -> None:
             print(f"[补收] 周期任务异常：{e}")
 
 
+async def _watch_cards_loop() -> None:
+    """卡池自动刷新（实时读盘）：按 config.watch.interval_sec 定时看一眼 草稿/ 与 生成/。
+
+    成本上限是一轮 `stat`（几十个文件几毫秒），只有新增/改过的文件才会跑 ffprobe
+    并写库；没变化时这一轮**零写入**。所以「有间隔」不等于「慢」，也不等于「占资源」。
+    """
+    import cardwatch
+    from db import get_db
+
+    while True:
+        try:
+            cfg = get_config()
+            await asyncio.sleep(max(2.0, float(cfg.watch.interval_sec)))
+            if not cfg.watch.enabled:
+                continue
+            ws = cfg.active_ws()
+            if ws is None:
+                continue
+            root = Path(ws.root)
+            # 从没建过索引的工作区不碰（get_db 会顺手把目录建出来）
+            if not (root / cfg.index_dir / "cards.db").is_file():
+                continue
+            stats = await asyncio.to_thread(
+                cardwatch.ensure_fresh,
+                cfg,
+                ws.name,
+                get_db(root),
+                root,
+                min_gap=0.0,
+                force=False,
+            )
+            if stats.get("added"):
+                print(f"[刷新] 自动登记 {stats['added']} 条新卡（{ws.name}）", flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 —— 刷新失败下一轮再来，绝不拖垮服务
+            print(f"[刷新] 卡池自动刷新失败：{e}", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _sweep_stale_jobs()
@@ -110,18 +149,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             log.exception("[startup] 资产索引启动失败（%s）：%s", root, e)
 
     task = asyncio.create_task(_reconcile_loop())
+    # 卡池自动刷新：和补收并列的第二个周期任务（只 stat 盘，成本可忽略）
+    cards_task = asyncio.create_task(_watch_cards_loop())
     try:
         yield
     finally:
         task.cancel()
+        cards_task.cancel()
         watch_stop.set()
         if watch_task is not None:
             watch_task.cancel()
         manager.shutdown()
-        try:
-            await task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
+        for t in (task, cards_task):
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         if watch_task is not None:
             try:
                 await watch_task

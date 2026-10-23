@@ -23,6 +23,7 @@ const SEGMENTS: SegmentItem[] = [
     status: "READY",
     issues: 0,
     prompt_file: "",
+    files: [],
   },
   {
     id: "55-5",
@@ -37,6 +38,7 @@ const SEGMENTS: SegmentItem[] = [
     status: "PARTIAL",
     issues: 1,
     prompt_file: "05_30_01_090-120s_参考体例版.md",
+    files: [],
   },
 ]
 

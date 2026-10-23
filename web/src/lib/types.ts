@@ -27,6 +27,11 @@ export interface Card {
   has_audio: number | null
   created_at: string
   updated_at: string
+  /**
+   * 文件已经不在盘上（被改名 / 移动 / 删掉）。
+   * 记录仍然保留（标签、备注、废稿原因是手写的），只是不许骗人说它能播。
+   */
+  missing?: boolean
 }
 
 export interface CardsResp {
@@ -41,6 +46,13 @@ export interface Workspace {
   name: string
   root: string
   created_at: string
+  /**
+   * 显示名（用户可随时改，空串 = 用 name）。
+   *
+   * 🔴 name 是「目录名 + 数据库 workspace 键 + URL 段」，改它要搬盘、改库、重开连接；
+   * 而 label 只是个标签。界面上要显示项目名，一律读 label，读写接口一律用 name。
+   */
+  label: string
   /** 每工作区的目录名覆盖；`asset: ""` 表示「资产目录未确定」 */
   folders: Record<string, string>
 }
@@ -417,6 +429,15 @@ export interface ConfigWorkflow {
   ref_image_size: string
 }
 
+/** 卡池自动刷新（实时读盘）的节流参数，对应后端 `config.watch` */
+export interface ConfigWatch {
+  enabled: boolean
+  /** 后台轮询间隔（秒）：只 stat 文件指纹，有新片才探测入库 */
+  interval_sec: number
+  /** 页面请求触发刷新的最小间隔（秒） */
+  request_gap_sec: number
+}
+
 export interface ConfigResp {
   comfyui: ConfigComfy
   ffmpeg: ConfigFFmpeg
@@ -426,6 +447,7 @@ export interface ConfigResp {
   workflow: ConfigWorkflow
   workspaces: Workspace[]
   active: string | null
+  watch?: ConfigWatch
 }
 
 /** GET /api/workflows 的一项（节点映射只读展示用） */

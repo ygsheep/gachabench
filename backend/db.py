@@ -167,6 +167,22 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def close_workspace(ws_root: Path) -> None:
+    """关掉某个工作区的连接并从缓存里摘掉（目录要改名 / 要搬走时必须先走这里）。
+
+    Windows 上父目录里只要还有打开的句柄，`Path.rename()` 就是 WinError 5，
+    所以「改目录名」这类动作必须先松手，再改完按新路径重新 get_db()。
+    """
+    key = str(Path(ws_root).resolve())
+    with _registry_guard:
+        db = _db_registry.pop(key, None)
+    if db is not None:
+        try:
+            db.conn.close()
+        except Exception:  # noqa: BLE001 —— 关不掉也不能挡住改名
+            pass
+
+
 def close_all() -> None:
     with _registry_guard:
         for db in _db_registry.values():

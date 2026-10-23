@@ -401,12 +401,24 @@ async def list_assets_api(
     category: str = Query(""),
     collection: str = Query(""),
     q: str = Query(""),
+    # 按一级目录前缀过滤：`dir=素材` 只看当前集要用的素材，`dir=资产` 只看全量资产库。
+    # 空 = 不按目录过滤（保持旧行为）。前端「素材 / 资产」两个 tab 就用它区分。
+    dir: str = Query(""),
     cursor: str = Query(""),
     limit: int = Query(80, ge=1, le=500),
 ):
     _cfg, root, ws = _ctx()
     with session_scope(root) as session:
         conds = _conditions(session, role, category, q, collection)
+        d = (dir or "").strip()
+        if d:
+            # 目录前缀过滤：`dir_path == d` 或 `dir_path` 以 `d/` 开头（含子目录）。
+            conds.append(
+                or_(
+                    IndexAsset.dir_path == d,
+                    IndexAsset.dir_path.like(f"{d}/%"),
+                )
+            )
         total = session.scalar(
             select(func.count()).select_from(IndexAsset).where(*conds)
         )

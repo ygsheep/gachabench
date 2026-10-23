@@ -42,6 +42,14 @@ def _clamp_int(value: Any, lo: int, hi: int, default: int) -> int:
     return max(lo, min(hi, n))
 
 
+def _clamp_float(value: Any, lo: float, hi: float, default: float) -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, n))
+
+
 def _need_text(value: Any, field: str) -> str:
     if value is None:
         raise HTTPException(status_code=400, detail=f"{field} 不能为空")
@@ -73,6 +81,7 @@ class ConfigPatch(BaseModel):
     folders: Optional[dict] = None
     workflow: Optional[dict] = None
     search: Optional[dict] = None
+    watch: Optional[dict] = None
 
 
 @router.get("")
@@ -147,6 +156,21 @@ async def write_config(patch: ConfigPatch):
                 patch.search["max_bytes"], 256 * 1024, 32 * 1024 * 1024, default=4 * 1024 * 1024
             )
         merged["search"] = cur
+
+    # ---- watch（卡池自动刷新：间隔秒数，越界夹回）----
+    # 这是「实时读盘」的节流阀：轮询只 stat 盘，但间隔太短也没意义（人手放不了那么快），
+    # 太长又会让人以为「还是看不到新片」。2~120 秒是能用的区间。
+    if patch.watch is not None:
+        cur = dict(merged.get("watch") or {})
+        if "enabled" in patch.watch:
+            cur["enabled"] = bool(patch.watch["enabled"])
+        if "interval_sec" in patch.watch:
+            cur["interval_sec"] = _clamp_float(patch.watch["interval_sec"], 2.0, 120.0, default=8.0)
+        if "request_gap_sec" in patch.watch:
+            cur["request_gap_sec"] = _clamp_float(
+                patch.watch["request_gap_sec"], 0.0, 60.0, default=1.5
+            )
+        merged["watch"] = cur
 
     # ---- 校验 + 落盘 ----
     from config import Config

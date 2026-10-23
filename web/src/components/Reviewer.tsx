@@ -444,6 +444,21 @@ export function Reviewer({
                   <span className="pointer-events-none absolute left-3 top-2.5 font-mono text-[11px] tracking-wide text-white/60">
                     {seg} · {chunkLabel(chunk)} · {timecode(pos)}
                   </span>
+                  {/* 文件没了就别装：盖一层说明，别让人对着黑屏按帧步进 */}
+                  {card.missing && (
+                    <div className="absolute inset-0 grid place-items-center bg-black/88 px-6 text-center">
+                      <div className="max-w-[34ch]">
+                        <p className="text-[13px] font-medium text-paper">文件已不在盘上</p>
+                        <p className="mt-1.5 break-all font-mono text-[10.5px] leading-relaxed text-ash-dim">
+                          {card.rel_path}
+                        </p>
+                        <p className="mt-2 text-[11.5px] leading-relaxed text-ash">
+                          被改名或移动了。这条记录可以留着（备注/废稿原因还在），
+                          重新扫描后新路径下会另立一张卡。
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   {stamp && (
                     <span
                       className="gb-stamp absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"

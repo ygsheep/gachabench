@@ -21,7 +21,11 @@ export function useSwrQuery<T>(
   key: string,
   queryKey: readonly unknown[],
   queryFn: (signal: AbortSignal) => Promise<T>,
-  opts?: { enabled?: boolean }
+  opts?: {
+    enabled?: boolean
+    /** 自动重取间隔（毫秒）；后端那边有节流，没新片时几乎零成本 */
+    refetchInterval?: number
+  }
 ): UseQueryResult<T> {
   // 函数形式：只有在 QueryCache 里没有这个 key 的数据时才会调用。
   // placeholderData 的类型签名要求「非 undefined」，而缓存未命中时我们就是要给
@@ -30,6 +34,9 @@ export function useSwrQuery<T>(
     queryKey,
     queryFn: ({ signal }: { signal: AbortSignal }) => queryFn(signal),
     enabled: opts?.enabled,
+    // 窗口在后台时不轮询：看片的时候不该一直占着请求
+    refetchInterval: opts?.refetchInterval,
+    refetchIntervalInBackground: false,
     placeholderData: () => swrRead<T>(key) ?? undefined,
   } as UseQueryOptions<T, Error, T, QueryKey>
 

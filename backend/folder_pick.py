@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from pathlib import Path
 
 import runtime
 
@@ -65,8 +66,12 @@ def _tkinter_ok() -> bool:
 
 def available() -> dict:
     """能力探测 —— 前端据此决定是否显示「浏览…」按钮，免得换台机器出现死按钮。"""
-    if _find_shell() and _SCRIPT.is_file():
-        return {"available": True, "backend": "pwsh"}
+    exe = _find_shell()
+    if exe and _SCRIPT.is_file():
+        # 报真实的 shell 种类，而不是一律标 pwsh：5.1 与 7+ 的对话框实现不同，
+        # 排查「点了没反应」时能一眼看出走的是哪条路。
+        backend = "pwsh" if Path(exe).stem.lower().startswith("pwsh") else "powershell"
+        return {"available": True, "backend": backend}
     if _tkinter_ok():
         return {"available": True, "backend": "tkinter"}
     return {"available": False, "backend": None}

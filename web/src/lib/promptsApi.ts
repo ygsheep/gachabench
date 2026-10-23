@@ -17,6 +17,13 @@ export interface SegRange {
   end: number
 }
 
+export interface SegmentFile {
+  name: string
+  kind: "ref" | "video" | "template" | "other"
+  sub: string
+  scene: string
+}
+
 export interface SegmentItem {
   id: string
   ep: number
@@ -30,6 +37,8 @@ export interface SegmentItem {
   status: StoryboardStatus
   issues: number
   prompt_file: string
+  /** 这一段在「提示词/」里关联的所有 md（参考图/视频/三段式/其他，按类型分类） */
+  files: SegmentFile[]
 }
 
 export interface DialogueItem {

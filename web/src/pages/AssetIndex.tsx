@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner"
 import {
   Check,
+  ClipboardCopy,
   File,
   FileArchive,
   FileMusic,
@@ -30,6 +31,8 @@ import { cn } from "cn"
 import { AssetUploadDialog, type UploadTarget } from "@/components/AssetUploadDialog"
 import { AssetOpsDialog, type AssetOpsTarget } from "@/components/AssetOpsDialog"
 import { AudioPreview, PinButton, VoiceBars, fmt, useAudioPlayer } from "@/components/AudioCell"
+import { MarkdownView } from "@/components/MarkdownView"
+import { copyImagesToClipboard } from "@/lib/clipboard"
 import { ApiError } from "@/lib/api"
 import {
   assetsKey,
@@ -66,6 +69,8 @@ export interface AssetIndexQuery {
   category?: string
   collection?: string
   q?: string
+  /** 一级目录 tab：`素材`（当前集要用的）或 `资产`（全量资产库）。 */
+  dir?: string
   asset?: string
   panel?: string
 }
@@ -165,6 +170,16 @@ export function AssetIndex({
   const trashedMode = activeCollection === "trashed"
   const specialMode = duplicatesMode || trashedMode
 
+  /** 目录 tab：默认「素材」（当前集要用的），可切到「资产」（全量资产库）。
+      只有这两个合法值；其余一律回落到「素材」。 */
+  const DIR_TABS = ["素材", "资产"] as const
+  const activeDir = DIR_TABS.includes(search.dir as (typeof DIR_TABS)[number])
+    ? (search.dir as (typeof DIR_TABS)[number])
+    : "素材"
+  /** 「资产」是全量库（几百张），强制平铺 + 懒加载；「素材」才允许分组视图。 */
+  const effectiveMode: "grouped" | "flat" =
+    activeDir === "资产" ? "flat" : mode
+
   /* ---------------- 重复 / 回收站（chip 计数 + 面板 + 检查器共用） ---------------- */
   const dupQ = useQuery({
     queryKey: DUPLICATES_KEY,
@@ -230,6 +245,7 @@ export function AssetIndex({
       category: search.category,
       collection: activeCollection,
       q: search.q,
+      dir: activeDir,
     }),
     queryFn: ({ pageParam, signal }) =>
       getAssets(
@@ -238,6 +254,7 @@ export function AssetIndex({
           category: search.category,
           collection: activeCollection,
           q: search.q,
+          dir: activeDir,
           cursor: pageParam,
           limit: PAGE_SIZE,
         },
@@ -256,9 +273,15 @@ export function AssetIndex({
   const total = listQ.data?.pages[0]?.total ?? 0
   const listRoot = listQ.data?.pages[0]?.root ?? ""
 
-  /* 分组视图要看到完整集合，把后续分页自动拉完（上限 500/页，通常 2~3 页）。 */
+  /* 分组视图要看到完整集合，把后续分页自动拉完（上限 500/页，通常 2~3 页）。
+     「素材」tab 文件少（几十个），分组有意义，拉完没问题；
+     「资产」tab 是全量库（几百个），必须严格懒加载，绝不自动拉完。 */
   const needAllPages =
-    mode === "grouped" && !specialMode && listQ.hasNextPage && !listQ.isFetchingNextPage
+    mode === "grouped" &&
+    activeDir === "素材" &&
+    !specialMode &&
+    listQ.hasNextPage &&
+    !listQ.isFetchingNextPage
   useEffect(() => {
     if (needAllPages) void listQ.fetchNextPage()
   }, [needAllPages, listQ])
@@ -326,6 +349,38 @@ export function AssetIndex({
     })
   }
 
+  /* ---------------- 复制图片到剪贴板 ---------------- */
+  async function copySelectedToClipboard() {
+    const imgs = selectedItems.filter((it) => it.media_kind === "image" && !!it.media_url)
+    if (!imgs.length) {
+      toast.error("选中的不是图片，复制不了")
+      return
+    }
+    const urls = imgs.map((it) => it.media_url)
+    const r = await copyImagesToClipboard(urls)
+    if (r.ok) {
+      if (urls.length > 1) {
+        // 当前内核不支持多条目，只复制了最后一张 —— 诚实告知，不假装全复制成功
+        toast("已复制最后选中的那张图片", {
+          description: "当前环境一次只能复制单张，多选时取最后一张",
+        })
+      } else {
+        toast.success("已复制图片到剪贴板", { description: "去微信 / 文档 / 画图里 Ctrl+V 粘贴" })
+      }
+    } else {
+      toast.error(r.message)
+    }
+  }
+
+  async function copyOneToClipboard(url: string, name: string) {
+    const r = await copyImagesToClipboard([url])
+    if (r.ok) {
+      toast.success("已复制图片到剪贴板", { description: name })
+    } else {
+      toast.error(r.message)
+    }
+  }
+
   /* ---------------- 虚拟网格度量（平铺） ---------------- */
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
@@ -347,6 +402,7 @@ export function AssetIndex({
     activeCollection ?? "",
     search.q ?? "",
     search.panel ?? "",
+    activeDir,
   ])
   useEffect(() => {
     const el = scrollRef.current
@@ -576,6 +632,35 @@ export function AssetIndex({
         </div>
       </header>
 
+      {/* ================= 目录 tab：素材（当前集） / 资产（全量库） ================= */}
+      {!specialMode && (
+        <div className="flex items-center gap-1 px-6 pb-3">
+          {DIR_TABS.map((t) => {
+            const active = activeDir === t
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onSearchChange({ dir: t, role: undefined, collection: undefined, panel: undefined })}
+                aria-pressed={active}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-ctl border px-3.5 text-[12.5px] font-medium transition-colors",
+                  active
+                    ? "border-wash-line bg-paper text-[#131313]"
+                    : "border-rule-soft bg-cell text-ash hover:bg-hi hover:text-paper"
+                )}
+              >
+                {t === "素材" ? <Images className="size-3.5" strokeWidth={1.7} /> : <LayoutGrid className="size-3.5" strokeWidth={1.7} />}
+                {t}
+                <span className="font-mono text-[10.5px] opacity-60">
+                  {t === "素材" ? "当前集" : "全量"}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* ================= 筛选第一行 ================= */}
       <div className="flex flex-wrap items-center gap-2.5 px-6 pb-2.5">
         <div className="relative w-[236px] max-[980px]:w-[160px]">
@@ -605,32 +690,35 @@ export function AssetIndex({
               ))}
             </select>
 
-            <div
-              role="group"
-              aria-label="视图模式"
-              className="inline-flex overflow-hidden rounded-ctl border border-rule bg-cell"
-            >
-              {([
-                { key: "grouped", label: "分组", Icon: LayoutGrid },
-                { key: "flat", label: "平铺", Icon: Grid2x2 },
-              ] as const).map(({ key, label, Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={mode === key}
-                  onClick={() => setMode(key)}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-1 px-2.5 text-[11.5px] transition-colors",
-                    mode === key
-                      ? "bg-hi font-medium text-paper"
-                      : "text-ash hover:bg-hi hover:text-paper"
-                  )}
-                >
-                  <Icon className="size-3.5" strokeWidth={1.7} />
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* 视图切换只在「素材」tab 有意义；「资产」是全量库，强制平铺 + 懒加载 */}
+            {activeDir === "素材" && (
+              <div
+                role="group"
+                aria-label="视图模式"
+                className="inline-flex overflow-hidden rounded-ctl border border-rule bg-cell"
+              >
+                {([
+                  { key: "grouped", label: "分组", Icon: LayoutGrid },
+                  { key: "flat", label: "平铺", Icon: Grid2x2 },
+                ] as const).map(({ key, label, Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={mode === key}
+                    onClick={() => setMode(key)}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1 px-2.5 text-[11.5px] transition-colors",
+                      mode === key
+                        ? "bg-hi font-medium text-paper"
+                        : "text-ash hover:bg-hi hover:text-paper"
+                    )}
+                  >
+                    <Icon className="size-3.5" strokeWidth={1.7} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -742,6 +830,14 @@ export function AssetIndex({
             </span>
             <button
               type="button"
+              onClick={() => void copySelectedToClipboard()}
+              className="inline-flex h-[26px] items-center gap-1 rounded-ctl border border-rule bg-cell px-2.5 text-[12px] font-medium text-paper transition-all hover:bg-hi active:translate-y-px"
+            >
+              <ClipboardCopy className="size-3.5" />
+              复制
+            </button>
+            <button
+              type="button"
               disabled={multi.size !== 1}
               title={multi.size === 1 ? "改名并同步改写引用" : "改名一次一个"}
               onClick={() => openOpsFromSelection("rename")}
@@ -801,8 +897,15 @@ export function AssetIndex({
               {Array.from({ length: 12 }, (_, i) => (
                 <div
                   key={i}
-                  className="h-[168px] animate-pulse rounded-cell border border-rule-soft bg-cell"
-                />
+                  className="h-[168px] overflow-hidden rounded-cell border border-rule-soft bg-cell"
+                >
+                  {/* 图片区骨架 + 底部文字骨架，接近真实卡片结构，加载时更「有内容感」 */}
+                  <div className="h-[112px] animate-pulse bg-muted" />
+                  <div className="space-y-1.5 px-2.5 py-2">
+                    <div className="h-2.5 w-3/4 animate-pulse rounded bg-muted" />
+                    <div className="h-2 w-1/2 animate-pulse rounded bg-muted" />
+                  </div>
+                </div>
               ))}
             </div>
           ) : listQ.isError ? (
@@ -848,7 +951,7 @@ export function AssetIndex({
                 换个角色或集合，或者把搜索清掉。
               </p>
             </div>
-          ) : mode === "grouped" ? (
+          ) : effectiveMode === "grouped" ? (
             /* 一个角色一节，节内一个主体一张「套」卡 */
             <div className="flex flex-col gap-4 px-4 pb-6 pt-3">
               {sections.map((sec) => (
@@ -1004,6 +1107,10 @@ export function AssetIndex({
             <AssetInspector
               detail={detailQ.data}
               onClose={() => onSearchChange({ asset: undefined })}
+              onCopy={() =>
+                detailQ.data?.media_url &&
+                void copyOneToClipboard(detailQ.data.media_url, detailQ.data.name)
+              }
               onRename={() =>
                 openOps("rename", [detailQ.data!.id], {
                   name: detailQ.data!.name,
@@ -1268,10 +1375,14 @@ function AssetCell({
   const missing = item.status === "missing"
   // 音频格：黑底区不放缩略图，放声部块（等宽竖条 = 材质，点亮段 = 真实进度）
   const isAudio = item.media_kind === "audio" && !!item.media_url
-  /* 双击预览只对「能看的」开放：图和视频。音频已经有悬停试听，再开一层大窗反而多余。
+  /* 双击预览：图 / 视频 / 文本都能看。音频已经有悬停试听，再开一层大窗反而多余。
      单击仍然是选中（右键菜单、批量操作都挂在选中上），双击是「打开看一眼」——两件事。 */
   const canPreview =
-    !missing && !!item.media_url && (item.media_kind === "video" || item.media_kind === "image")
+    !missing &&
+    !!item.media_url &&
+    (item.media_kind === "video" ||
+      item.media_kind === "image" ||
+      item.media_kind === "text")
   const ap = useAudioPlayer(item.media_url)
   return (
     <div
@@ -1424,6 +1535,30 @@ function MediaPreview({ item, onClose }: { item: IndexAssetItem; onClose: () => 
   }, [onClose])
 
   const isVideo = item.media_kind === "video"
+  const isText = item.media_kind === "text"
+
+  /* 文本预览：拿到原始文本就显示，拿不到（后端没回）就给个可读的提示。 */
+  const [text, setText] = useState<string | null>(null)
+  const [textErr, setTextErr] = useState(false)
+  useEffect(() => {
+    if (!isText) return
+    let alive = true
+    fetch(item.media_url)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status))
+        return r.text()
+      })
+      .then((t) => {
+        if (alive) setText(t)
+      })
+      .catch(() => {
+        if (alive) setTextErr(true)
+      })
+    return () => {
+      alive = false
+    }
+  }, [isText, item.media_url])
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4 sm:p-6"
@@ -1456,7 +1591,17 @@ function MediaPreview({ item, onClose }: { item: IndexAssetItem; onClose: () => 
         </header>
 
         <div className="min-h-0 flex-1 bg-black">
-          {isVideo ? (
+          {isText ? (
+            <div className="h-full overflow-auto bg-[#0c0c0c]">
+              {textErr ? (
+                <p className="p-6 text-[12.5px] text-ash">读不到文件内容（可能被移动或删除）。</p>
+              ) : text === null ? (
+                <p className="p-6 text-[12.5px] text-ash-dim">读取中…</p>
+              ) : (
+                <MarkdownView text={text} />
+              )}
+            </div>
+          ) : isVideo ? (
             <video
               key={item.id}
               src={item.media_url}
@@ -1514,12 +1659,14 @@ function KindIcon({ kind }: { kind: string }) {
 function AssetInspector({
   detail,
   onClose,
+  onCopy,
   onRename,
   onMove,
   onTrash,
 }: {
   detail: IndexAssetDetail
   onClose: () => void
+  onCopy: () => void
   onRename: () => void
   onMove: () => void
   onTrash: () => void
@@ -1656,6 +1803,16 @@ function AssetInspector({
         {/* 单件操作（P2）：都走先计划后应用 */}
         <div className="mt-4 border-t border-rule-soft pt-3">
           <div className="flex flex-wrap items-center gap-2">
+            {detail.media_kind === "image" && (
+              <button
+                type="button"
+                onClick={onCopy}
+                className={cn(INSPECTOR_BTN, "border-wash-line bg-wash text-paper")}
+              >
+                <ClipboardCopy className="size-3.5" />
+                复制图片
+              </button>
+            )}
             <button type="button" onClick={onRename} className={INSPECTOR_BTN}>
               改名
             </button>

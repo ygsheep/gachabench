@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { createRoute } from "@tanstack/react-router"
-import { GachaBoard } from "@/pages/GachaBoard"
+import { ReviewDesk } from "@/pages/ReviewDesk"
 import { useActiveWorkspace } from "@/lib/workspace"
 import type { CardFilter } from "@/store/useApp"
 import type { CardStatus } from "@/lib/types"
@@ -46,7 +46,7 @@ function ReviewRoute() {
   )
 
   return (
-    <GachaBoard
+    <ReviewDesk
       workspace={workspace}
       filter={filter}
       onFilterChange={(patch) => {

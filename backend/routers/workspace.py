@@ -2,6 +2,7 @@
 """工作区 API：列表 / 新建 / 打开 / 激活 / 目录角色 / 重命名 / 移除 / 扫描。"""
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -65,7 +66,10 @@ class InspectBody(BaseModel):
 
 
 class NameBody(BaseModel):
-    name: str
+    # 只改显示名（推荐）：不动目录、不动库
+    label: Optional[str] = None
+    # 真改目录名（危险）：会搬动整个工作区目录并改写库里五张表的 workspace 列
+    name: Optional[str] = None
 
 
 class FoldersBody(BaseModel):
@@ -134,10 +138,29 @@ async def set_ws_folders(name: str, body: FoldersBody):
 
 @router.patch("/{name}")
 async def rename_ws(name: str, body: NameBody):
+    """改名。`label` = 只改显示名（默认路径）；`name` = 连磁盘目录一起改（危险）。"""
+    from config import get_config
+    from workspaces import set_label
+
+    if body.label is None and body.name is None:
+        raise HTTPException(status_code=400, detail="要么给 label（显示名），要么给 name（目录名）")
+
+    key = name
+    ws: Optional[WorkspaceEntry] = None
     try:
-        ws = rename(name, body.name)
+        # 只有「确实要换目录名」才走危险路径
+        if body.name is not None and body.name.strip() and body.name.strip() != name:
+            ws = rename(name, body.name)
+            key = ws.name  # 目录名已改，后续按新名找
+        if body.label is not None:
+            ws = set_label(key, body.label)
     except WorkSpaceError as e:
         raise _err(e)
+
+    if ws is None:  # 传了 name 但和现名一样：当无操作，原样返回
+        ws = next((w for w in get_config().workspaces if w.name == key), None)
+        if ws is None:
+            raise HTTPException(status_code=404, detail=f"工作区不存在：{key}")
     return {"workspace": ws}
 
 
@@ -151,10 +174,13 @@ async def delete_ws(name: str):
 
 @router.post("/{name}/scan")
 async def scan_ws(name: str):
-    """遍历 草稿/ + 生成/ 登记新卡（幂等 upsert）；顺带补收 ComfyUI 侧产物 + 重扫资产库。"""
+    """立即全量重探 草稿/ + 生成/（强制，不等指纹）；顺带补收 ComfyUI 产物 + 重扫资产库。
+
+    平时不必点它：后台每 `config.watch.interval_sec` 秒会自己增量看一眼，
+    打开审片台时也会先刷新一次。这个接口是「我现在就要，而且连旧片也重新探一遍」。
+    """
     from config import get_config
     from db import get_db
-    from repo import upsert_card_by_path
 
     cfg = get_config()
     ws = next((w for w in cfg.workspaces if w.name == name), None)
@@ -163,21 +189,11 @@ async def scan_ws(name: str):
 
     root = Path(ws.root)
     db = get_db(root)
-    added = updated = 0
-    for folder_key in ("draft", "final"):
-        folder = cfg.folder_name(folder_key, ws)
-        if not folder:
-            continue
-        base = root / folder
-        if not base.is_dir():
-            continue
-        for mp4 in sorted(base.rglob("*.mp4")):
-            rel = str(mp4.relative_to(root)).replace("\\", "/")
-            _, created = upsert_card_by_path(db, ws.name, rel, cfg)
-            if created:
-                added += 1
-            else:
-                updated += 1
+
+    import cardwatch
+
+    res = await asyncio.to_thread(cardwatch.ensure_fresh, cfg, ws.name, db, root, force=True)
+    added, updated = int(res["added"]), int(res["updated"])
 
     # 再补一层：ComfyUI 已经跑完、产物还躺在它自己 output 目录里的任务也捞回来。
     # 只看本地目录的扫描救不回这些成片 —— 那正是「跑完了但草稿里找不到」的另一半。
@@ -194,6 +210,12 @@ async def scan_ws(name: str):
         added += int(stats.get("cards") or 0)
     except Exception as e:  # noqa: BLE001 —— 补收失败不该让扫描整个 500
         rescued["problems"] = [f"补收失败：{str(e)[:200]}"]
+
+    # 补收会往 草稿/ 里写文件：把指纹推到最新，免得后台循环把刚落库的片子再探一遍
+    try:
+        await asyncio.to_thread(cardwatch.note_root, cfg, ws)
+    except Exception:  # noqa: BLE001
+        pass
 
     asset_folder = cfg.folder_name("asset", ws)
     if asset_folder and (root / asset_folder).is_dir():

@@ -267,26 +267,101 @@ def set_folders(name: str, mapping: dict[str, str]) -> WorkspaceEntry:
     raise WorkSpaceError(f"工作区不存在：{name}")
 
 
-def rename(name: str, new_name: str) -> WorkspaceEntry:
+# 显示名的长度上限（界面上一行要放得下，也免得把下拉框撑爆）
+LABEL_MAX = 40
+
+
+def set_label(name: str, label: str) -> WorkspaceEntry:
+    """只改「显示名」，不动目录名、不动库。
+
+    空串 = 恢复成用目录名显示。这是重命名项目的**唯一推荐路径**：
+    name 是库键与 URL 段，动它代价太大（见 WorkspaceEntry.label 的注释）。
+    """
     cfg = get_config()
-    new_name = new_name.strip()
-    if not new_name or not re.fullmatch(r"[\w\u4e00-\u9fff\- ]+", new_name):
-        raise WorkSpaceError("新名称非法")
-    for ws in cfg.workspaces:
-        if ws.name == new_name:
-            raise WorkSpaceError(f"已存在同名工作区：{new_name}")
+    raw = (label or "").strip()
+    if len(raw) > LABEL_MAX:
+        raise WorkSpaceError(f"显示名最多 {LABEL_MAX} 个字")
+    if any(ord(ch) < 32 for ch in raw):
+        raise WorkSpaceError("显示名不能含换行 / 控制字符")
     for ws in cfg.workspaces:
         if ws.name == name:
-            old = Path(ws.root)
-            new_root = old.parent / new_name
-            if old.exists():
-                old.rename(new_root)
-            ws.name = new_name
-            ws.root = str(new_root)
-            if cfg.active == name:
-                cfg.active = new_name
+            ws.label = raw
             set_config(cfg)
             return ws
+    raise WorkSpaceError(f"工作区不存在：{name}")
+
+
+def _rekey_workspace_rows(root: Path, old_name: str, new_name: str) -> list[str]:
+    """把库里五张表的 workspace 列从旧名改到新名。返回出问题的表名。"""
+    from db import get_db
+
+    problems: list[str] = []
+    db = get_db(Path(root))
+    with db.lock:
+        for table in ("cards", "split_plans", "jobs", "assets", "books"):
+            try:
+                db.conn.execute(
+                    f"UPDATE {table} SET workspace=? WHERE workspace=?", (new_name, old_name)
+                )
+            except Exception as e:  # noqa: BLE001 —— 表可能还没建过
+                problems.append(f"{table}: {e}")
+        db.conn.commit()
+    return problems
+
+
+def rename(name: str, new_name: str) -> WorkspaceEntry:
+    """真改目录名（连带搬工作区目录）。
+
+    ⚠️ 危险动作，前端**没有**入口 —— 界面上改「项目名称」请用 `label`（set_label）。
+    这里只保留给「确实要连盘一起搬」的场景，并且必须做全三件事：
+      1. 先断开这个工作区的 SQLite 连接（进程开着库，Windows 拒绝改父目录名）；
+      2. 改完把五张表的 workspace 列一起改掉（否则卡池按新名查不到任何卡）；
+      3. 按新路径重开库（连接缓存以绝对路径为键）。
+    """
+    cfg = get_config()
+    new_name = (new_name or "").strip()
+    if not new_name or not re.fullmatch(r"[\w\u4e00-\u9fff\- ]+", new_name):
+        raise WorkSpaceError("新名称非法：仅允许中文/字母/数字/下划线/连线/空格")
+    for ws in cfg.workspaces:
+        if ws.name == new_name and ws.name != name:
+            raise WorkSpaceError(f"已存在同名工作区：{new_name}")
+    for ws in cfg.workspaces:
+        if ws.name != name:
+            continue
+        if new_name == name:
+            return ws
+
+        old = Path(ws.root)
+        new_root = old.parent / new_name
+        if new_root.exists():
+            raise WorkSpaceError(f"目标目录已存在，换个名字：{new_root}")
+
+        if old.exists():
+            from db import close_workspace
+
+            close_workspace(old)  # 不关连接，目录改名在 Windows 上必失败
+            try:
+                old.rename(new_root)
+            except OSError as e:
+                raise WorkSpaceError(
+                    f"目录改名失败（可能被资源管理器或其它程序占用）：{e}"
+                ) from e
+            problems = _rekey_workspace_rows(new_root, name, new_name)
+            if problems:
+                raise WorkSpaceError(
+                    "目录已改名，但库里有些表没跟着改：" + "；".join(problems)
+                    + "。请重启后端后手动重新扫描。"
+                )
+
+        # 显示名如果只是「跟着目录名走」（没单独设过），一起更新
+        if not (ws.label or "").strip() or ws.label == name:
+            ws.label = new_name
+        ws.name = new_name
+        ws.root = str(new_root)
+        if cfg.active == name:
+            cfg.active = new_name
+        set_config(cfg)
+        return ws
     raise WorkSpaceError(f"工作区不存在：{name}")
 
 

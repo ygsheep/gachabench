@@ -14,7 +14,7 @@ import { TaskBar } from "@/components/TaskBar"
 import { WorkspaceGate } from "@/pages/WorkspaceGate"
 import { api } from "@/lib/api"
 import { useHealth } from "@/lib/health"
-import { WorkspaceProvider } from "@/lib/workspace"
+import { WorkspaceProvider, wsTitle } from "@/lib/workspace"
 import { legacyHashKey } from "@/app/legacy-hash"
 import { useApp } from "@/store/useApp"
 import type { Workspace } from "@/lib/types"
@@ -105,10 +105,15 @@ function RootLayout() {
   if (!workspaces.length || !health.data?.active_workspace) return <WorkspaceGate />
 
   const active = ws.data?.active ?? health.data.active_workspace
-  const fixedViewport = pathname.startsWith("/assets")
+  // 显示名（label）与目录名（name）分开传：页面里给人看的用 title，拼接口的用 name
+  const activeTitle = wsTitle(workspaces.find((w) => w.name === active))
+  /* 这两页是「视口高度固定 + 内层自己滚」的布局：
+     资产库的虚拟网格要求如此，审片台的三栏各自滚动也要求如此
+     （不锁高度时左栏会被内容撑满，滚动落到文档上，整页跟着跳）。 */
+  const fixedViewport = pathname.startsWith("/assets") || pathname.startsWith("/review")
 
   return (
-    <WorkspaceProvider value={active}>
+    <WorkspaceProvider value={active} title={activeTitle}>
       <div className="flex min-h-svh max-[980px]:flex-col-reverse">
         <Rail
           workspaces={workspaces}

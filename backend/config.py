@@ -26,8 +26,10 @@ class ComfyUIConfig(BaseModel):
     base_url: str = "http://127.0.0.1:8188"
     poll_interval_sec: int = 5
     timeout_min: int = 60
-    comfy_output_dir: str = "R:/workspace/A_ComfyUI/ComfyUI/output"
-    input_dir: str = "R:/workspace/A_ComfyUI/ComfyUI/input"
+    # 产物 / 输入目录默认留空：这两处必须由用户手动选择本机实际路径，
+    # 空值表示「尚未配置」——跑片前会提示用户去设置里选，绝不拿别处机器的路径硬顶。
+    comfy_output_dir: str = ""
+    input_dir: str = ""
 
 
 class FFmpegConfig(BaseModel):
@@ -88,6 +90,19 @@ class WorkflowConfig(BaseModel):
     ref_image_size: str = "max"
 
 
+class WatchConfig(BaseModel):
+    """卡池自动刷新（实时读盘）的节流参数。
+
+    后台每 `interval_sec` 秒只看一次 `草稿/` 与 `生成/` 的文件指纹（size + mtime，
+    纯 stat，不跑 ffprobe）；只有新增/变化的文件才探测入库。`request_gap_sec`
+    是「页面请求触发刷新」的最小间隔，防止来回切页时反复扫盘。
+    """
+
+    enabled: bool = True
+    interval_sec: float = 8.0
+    request_gap_sec: float = 1.5
+
+
 class SearchConfig(BaseModel):
     """联网采集（整合方案 L3 / C3）的开关。见 docs/INTEGRATION-novel-booksource-engine.md §7 M7。
 
@@ -131,10 +146,22 @@ class WorkspaceEntry(BaseModel):
     name: str
     root: str
     created_at: str = ""
+    # 显示名（用户可随时改）。空串 = 直接用目录名 name。
+    #
+    # 🔴 为什么要有它：name 同时是「目录名 + 库里 workspace 列的键 + URL 里的段」，
+    # 改它就得改物理目录、改五张表的 workspace 列、改连接缓存 —— 而后端进程一直
+    # 握着 <工作区>/.gachabench/cards.db，Windows 上连目录改名都会被拒（WinError 5）。
+    # 所以「名字不好看」这件事只动这个字段，一个字节都不碰盘和库。
+    label: str = ""
     # 每工作区的目录名覆盖（键取自 FOLDER_KEYS）；缺省键回退全局 folders。
     # 值为空串表示「该角色目录尚未确定」（打开项目时未匹配到资产目录名，
     # 需前端手动选择）。资产目录尤其常见：有人叫「素材」有人叫「资产」。
     folders: dict[str, str] = Field(default_factory=dict)
+
+    @property
+    def title(self) -> str:
+        """界面上显示的名字：优先 label，其次目录名。"""
+        return (self.label or "").strip() or self.name
 
 
 class Config(BaseModel):
@@ -149,6 +176,7 @@ class Config(BaseModel):
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     workspaces: list[WorkspaceEntry] = Field(default_factory=list)
     active: Optional[str] = None
+    watch: WatchConfig = Field(default_factory=WatchConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
 
@@ -202,16 +230,11 @@ class Config(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _default_config() -> Config:
-    # 默认工作区：复试2（对齐 SPEC §4）
+    # 默认无工作区：首次启动进入「项目」空态，由用户新建 / 打开工作区。
+    # 曾经的「复试2」只是原开发机上的一个示例，不该作为默认值带进配置。
     return Config(
-        workspaces=[
-            WorkspaceEntry(
-                name="复试2",
-                root="D:/Notely/workspace/AIGC/复试2",
-                created_at="2026-10-15T00:00:00",
-            )
-        ],
-        active="复试2",
+        workspaces=[],
+        active=None,
     )
 
 

@@ -5,12 +5,16 @@ import {
   FolderPlus,
   Images,
   LayoutGrid,
+  Pencil,
   RotateCw,
   Settings,
 } from "lucide-react"
+import { useState } from "react"
 import { Link, useRouterState } from "@tanstack/react-router"
 import { cn } from "cn"
+import { WorkspaceNameDialog } from "@/components/WorkspaceNameDialog"
 import { useHealth } from "@/lib/health"
+import { wsTitle } from "@/lib/workspace"
 import type { Workspace } from "@/lib/types"
 
 const NAV = [
@@ -51,6 +55,8 @@ export function Rail({
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const current = activeKey(pathname)
   const health = useHealth()
+  const [renaming, setRenaming] = useState(false)
+  const activeWs = workspaces.find((w) => w.name === active) ?? null
   const online = !!health.data && !health.isError
   const ffmpeg = health.data?.ffmpeg ?? false
   const comfy = health.data?.comfyui.configured ?? false
@@ -99,15 +105,28 @@ export function Rail({
       </nav>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-rule-soft p-2 max-[980px]:hidden">
-        <button
-          type="button"
-          onClick={onOpenProjects}
-          title="新建 / 打开项目"
-          className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-ctl border border-rule bg-cell text-[10.5px] font-medium text-ash transition-colors hover:bg-hi hover:text-paper active:translate-y-px"
-        >
-          <FolderPlus className="size-3.5" />
-          项目
-        </button>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={onOpenProjects}
+            title="新建 / 打开项目"
+            className="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-ctl border border-rule bg-cell text-[10.5px] font-medium text-ash transition-colors hover:bg-hi hover:text-paper active:translate-y-px"
+          >
+            <FolderPlus className="size-3.5" />
+            项目
+          </button>
+          {/* 改名只改显示名（label），不碰磁盘目录与库 —— 见 WorkspaceNameDialog */}
+          <button
+            type="button"
+            onClick={() => setRenaming(true)}
+            disabled={!activeWs}
+            title={`改项目名（当前显示「${wsTitle(activeWs)}」，目录名 ${active}）`}
+            aria-label="改项目名"
+            className="grid h-7 w-7 flex-none place-items-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper active:translate-y-px disabled:opacity-45"
+          >
+            <Pencil className="size-3" />
+          </button>
+        </div>
         <select
           value={active}
           disabled={switching}
@@ -115,12 +134,12 @@ export function Rail({
             if (e.target.value !== active) onPickWorkspace(e.target.value)
           }}
           aria-label="切换工作区"
-          title={active}
+          title={`${wsTitle(activeWs)}（目录名 ${active}）`}
           className="h-7 w-full truncate rounded-ctl border border-rule bg-cell px-1.5 text-[10.5px] outline-none focus:border-wash-line disabled:opacity-45"
         >
           {workspaces.map((w) => (
             <option key={w.name} value={w.name}>
-              {w.name}
+              {wsTitle(w)}
             </option>
           ))}
         </select>
@@ -133,6 +152,10 @@ export function Rail({
           <Health on={comfy} label={comfy ? "ComfyUI" : "ComfyUI 未配"} />
         </div>
       </div>
+
+      {renaming && activeWs && (
+        <WorkspaceNameDialog ws={activeWs} onClose={() => setRenaming(false)} />
+      )}
     </aside>
   )
 }

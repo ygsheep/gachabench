@@ -110,6 +110,17 @@ def ingest_files(
         except Exception as e:  # noqa: BLE001 —— 一错就整轮丢是原缺陷，这里必须兜住
             problems.append(f"{dst.name} 登记失败：{str(e)[:200]}")
 
+    # 刚落库的产物不必再等后台指纹轮去探一遍：把指纹推到最新，
+    # 否则下一轮它会把这几个刚登记过的文件当成「新片」再跑一次 ffprobe。
+    try:
+        import cardwatch
+
+        ws = next((w for w in cfg.workspaces if w.name == workspace), None)
+        if ws is not None and saved:
+            cardwatch.note_root(cfg, ws)
+    except Exception:  # noqa: BLE001 —— 只是省一次探测，失败无所谓
+        pass
+
     return {
         "folder": str(draft),
         "saved": saved,

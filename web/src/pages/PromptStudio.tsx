@@ -36,6 +36,7 @@ import {
   type Finding,
   type MaterialRow,
   type PatchResult,
+  type SegmentFile,
   type SegmentItem,
   type Shot,
 } from "@/lib/promptsApi"
@@ -704,6 +705,28 @@ function SegmentRail({
                   {s.spoken > 0 && <span>{s.spoken} 发声</span>}
                   {s.prompt_file && <span className="text-ash">已有稿</span>}
                 </span>
+                {/* 关联文件：按场景配对参考图↔视频提示词 */}
+                {s.files && s.files.length > 0 && (
+                  <span className="flex flex-col gap-0.5">
+                    {pairFiles(s.files).map((p) => (
+                      <span
+                        key={p.scene}
+                        className="flex items-center gap-1 text-[10px] text-ash-dim"
+                        title={p.names.join("  ·  ")}
+                      >
+                        <span className="font-mono text-ash">{p.scene || "—"}</span>
+                        <span className="flex items-center gap-0.5">
+                          {p.hasRef && (
+                            <span className="rounded border border-rule px-1 text-[9px] text-ash">图</span>
+                          )}
+                          {p.hasVideo && (
+                            <span className="rounded border border-wash-line px-1 text-[9px] text-paper">片</span>
+                          )}
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -711,6 +734,23 @@ function SegmentRail({
       </div>
     </aside>
   )
+}
+
+/** 把一段的关联文件按「场景」归组，配对参考图↔视频，返回 [{scene, hasRef, hasVideo, names}] */
+function pairFiles(files: SegmentFile[]): { scene: string; hasRef: boolean; hasVideo: boolean; names: string[] }[] {
+  const byScene = new Map<string, { hasRef: boolean; hasVideo: boolean; names: string[] }>()
+  for (const f of files) {
+    const key = f.scene || f.sub || "—"
+    let g = byScene.get(key)
+    if (!g) {
+      g = { hasRef: false, hasVideo: false, names: [] }
+      byScene.set(key, g)
+    }
+    if (f.kind === "ref") g.hasRef = true
+    if (f.kind === "video") g.hasVideo = true
+    g.names.push(f.name)
+  }
+  return [...byScene.entries()].map(([scene, g]) => ({ scene, ...g }))
 }
 
 /* 列宽用百分比写死，配合 table-fixed：

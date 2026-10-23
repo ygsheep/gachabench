@@ -117,7 +117,15 @@ def category_for_ext(ext: str) -> str:
 
 def media_kind_for_ext(ext: str) -> str:
     category = category_for_ext(ext)
-    return category if category in ("image", "video", "audio") else "other"
+    if category in ("image", "video", "audio"):
+        return category
+    # 文本 / 压缩也要如实返回：前端据此区分图标、是否可双击预览、卡片样式。
+    # 之前一律落 "other"，导致 md/txt 在资产页显示成「其它」通用文件，且无法预览。
+    if category == "text":
+        return "text"
+    if category == "archive":
+        return "archive"
+    return "other"
 
 
 def is_image(ext: str) -> bool:

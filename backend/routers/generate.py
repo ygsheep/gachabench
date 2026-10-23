@@ -208,6 +208,19 @@ async def split_generate(plan_id: int, body: GenerateBody):
     _check_params(body)
     wf_path = _resolve_workflow(cfg, body.workflow)
 
+    # 产物 / 输入目录未配置时直接拦下：空值会退化成当前工作目录（Path("") == "."），
+    # 参考图、参考音频、成片回捞全部落到错误位置，排查成本极高。这里让用户先去设置页选好。
+    if not cfg.comfyui.comfy_output_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="尚未设置 ComfyUI 产物目录（跑完的片落哪里）—— 请到「设置」里选择",
+        )
+    if not cfg.comfyui.input_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="尚未设置 ComfyUI 输入目录（参考图/音频的汇合点）—— 请到「设置」里选择",
+        )
+
     # 音频校验：必须已在 ComfyUI input 目录
     audios = body.audio_files or []
     if len(audios) > 3:

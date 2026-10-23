@@ -5,76 +5,16 @@ import { Download, Keyboard, RotateCw, Search } from "lucide-react"
 import { cn } from "cn"
 import { FilmCell } from "@/components/FilmCell"
 import { Reviewer } from "@/components/Reviewer"
+import { Segmented } from "@/components/Segmented"
 import { StitchRail } from "@/components/StitchRail"
 import { api } from "@/lib/api"
+import { groupCards, matches } from "@/lib/board"
 import { exportRange } from "@/lib/download"
 import { useSwrQuery } from "@/lib/useSwrQuery"
-import { STATUS_LABEL, chunkLabel, chunkRank, seconds } from "@/lib/format"
+import { STATUS_LABEL, chunkLabel, seconds } from "@/lib/format"
 import { useApp, type CardFilter } from "@/store/useApp"
-import type { Card, CardStatus, CardsResp } from "@/lib/types"
+import type { CardStatus, CardsResp } from "@/lib/types"
 
-interface Block {
-  chunk: string
-  takes: Card[]
-}
-interface Row {
-  seg: string
-  blocks: Block[]
-}
-
-const STATUS_RANK: Record<CardStatus, number> = { final: 0, draft: 1, reject: 2 }
-
-function sortTakes(list: Card[]): Card[] {
-  return [...list].sort(
-    (a, b) =>
-      STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
-      (b.updated_at || "").localeCompare(a.updated_at || "")
-  )
-}
-
-/** 卡池 → 段 / 块 / 候选条 两级结构（一块 = 一次 5s 抽卡，一条 = 一次抽出来的结果） */
-function groupCards(cards: Card[]): Row[] {
-  const bySeg = new Map<string, Map<string, Card[]>>()
-  for (const c of cards) {
-    const seg = c.seg ?? ""
-    const chunk = c.chunk ?? ((c.duration ?? 0) >= 10 ? "整段" : "未分块")
-    let m = bySeg.get(seg)
-    if (!m) {
-      m = new Map<string, Card[]>()
-      bySeg.set(seg, m)
-    }
-    const list = m.get(chunk)
-    if (list) list.push(c)
-    else m.set(chunk, [c])
-  }
-  return [...bySeg.entries()]
-    .map(([seg, m]) => ({
-      seg,
-      blocks: [...m.entries()]
-        .map(([chunk, takes]) => ({ chunk, takes: sortTakes(takes) }))
-        .sort((a, b) => chunkRank(a.chunk) - chunkRank(b.chunk) || a.chunk.localeCompare(b.chunk)),
-    }))
-    .sort((a, b) => (a.seg || "zz").localeCompare(b.seg || "zz"))
-}
-
-function matches(c: Card, status: string, q: string): boolean {
-  if (status !== "all" && c.status !== status) return false
-  if (q) {
-    const hay = [
-      c.seg ?? "",
-      c.chunk ?? "",
-      c.rel_path,
-      c.note,
-      c.reject_note,
-      ...c.tags,
-      ...c.reject_tags,
-    ]
-      .join(" ")
-      .toLowerCase()
-    if (!hay.includes(q.toLowerCase())) return false
-  }
-  return true
-}
 
 export function GachaBoard({
   workspace,
@@ -433,53 +373,6 @@ export function GachaBoard({
       )}
 
       {keys && <KeysSheet onClose={() => setKeys(false)} />}
-    </div>
-  )
-}
-
-function Segmented({
-  value,
-  onChange,
-  options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { v: string; label: string; n: number }[]
-}) {
-  const i = Math.max(
-    0,
-    options.findIndex((o) => o.v === value)
-  )
-  const W = 100 / options.length
-  return (
-    <div className="relative inline-flex rounded-ctl border border-rule bg-panel p-0.5">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute bottom-0.5 top-0.5 rounded-[4px] border border-[#565656] bg-hi transition-transform duration-300 ease-[cubic-bezier(.2,.8,.25,1)]"
-        style={{
-          width: `calc(${W}% - 4px)`,
-          transform: `translateX(calc(${i * 100}% + ${i * 4}px))`,
-        }}
-      />
-      {options.map((o) => (
-        <button
-          key={o.v}
-          type="button"
-          onClick={() => onChange(o.v)}
-          aria-pressed={o.v === value}
-          className={cn(
-            "relative z-1 inline-flex h-[26px] items-center gap-1.5 rounded-[4px] px-2.5 text-[12.5px] transition-colors",
-            o.v === value ? "font-medium text-paper" : "text-ash hover:text-paper"
-          )}
-        >
-          {o.label}
-          <span
-            className={cn("font-mono text-[11px]", o.v === value ? "text-white" : "text-ash-dim")}
-          >
-            {o.n}
-          </span>
-        </button>
-      ))}
     </div>
   )
 }
