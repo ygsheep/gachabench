@@ -21,6 +21,7 @@ from workspaces import (
     remove,
     rename,
     set_folders,
+    set_watch_dirs,
 )
 
 log = logging.getLogger("gachabench.workspace")
@@ -44,6 +45,22 @@ def _warm_index(entry: WorkspaceEntry) -> None:
         get_scan_manager().ensure_started(root)
     except Exception as exc:  # noqa: BLE001
         log.exception("[workspace] 「%s」索引预热失败：%s", entry.name, exc)
+
+    _write_naming_doc(entry)
+
+
+def _write_naming_doc(entry: WorkspaceEntry) -> None:
+    """资产目录一确定就补 `README.md`（外部 Agent 读它才知道命名规范）。
+
+    写失败不影响接口返回：这是文档，不是数据。
+    """
+    from config import get_config
+    from naming_doc import ensure_for_workspace
+
+    try:
+        ensure_for_workspace(get_config(), entry)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[workspace] 「%s」命名规范 README 生成失败：%s", entry.name, exc)
 
 
 class CreateBody(BaseModel):
@@ -133,7 +150,93 @@ async def set_ws_folders(name: str, body: FoldersBody):
         ws = set_folders(name, body.folders)
     except WorkSpaceError as e:
         raise _err(e)
+    # 资产目录可能刚被改到另一个名字：新目录里也要有那份规范文档
+    _write_naming_doc(ws)
     return {"workspace": ws}
+
+
+class WatchDirsBody(BaseModel):
+    dirs: list[str] = []
+
+
+@router.get("/{name}/watch-dirs")
+async def get_watch_dirs(name: str):
+    """额外监听目录（收编源）。空数组 = 只收工作区自己的草稿目录。"""
+    from config import get_config
+
+    ws = next((w for w in get_config().workspaces if w.name == name), None)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{name}")
+    return {"name": ws.name, "watch_dirs": list(ws.watch_dirs or [])}
+
+
+@router.patch("/{name}/watch-dirs")
+async def patch_watch_dirs(name: str, body: WatchDirsBody):
+    """整组替换。校验不过直接 400，**不静默丢弃**坏路径。"""
+    try:
+        ws = set_watch_dirs(name, body.dirs)
+    except WorkSpaceError as e:
+        raise _err(e)
+    return {"name": ws.name, "watch_dirs": list(ws.watch_dirs or [])}
+
+
+@router.get("/{name}/folder-migration")
+async def get_folder_migration(name: str):
+    """只读检查：旧的「库叫素材」布局要不要迁到 `资产/ + 素材/`。"""
+    from folders_migrate import plan_migration
+
+    try:
+        return plan_migration(name)
+    except WorkSpaceError as e:
+        raise _err(e)
+
+
+@router.post("/{name}/folder-migration")
+async def run_folder_migration(name: str):
+    """执行迁移（磁盘改名 + 配置 + 索引前缀改写）。可逆，但不自动重跑。"""
+    from folders_migrate import apply_migration
+    from config import get_config
+
+    try:
+        result = await asyncio.to_thread(apply_migration, name)
+    except WorkSpaceError as e:
+        raise _err(e)
+    if result.get("status") == "done":
+        _warm_index(next(w for w in get_config().workspaces if w.name == name))
+    return result
+
+
+@router.post("/{name}/intake")
+async def run_intake(name: str):
+    """立即收编一轮：额外监听目录的新文件 → 复制进 草稿/（只改能证实的名字）。"""
+    from config import get_config
+    from intake import intake_workspace
+
+    cfg = get_config()
+    ws = next((w for w in cfg.workspaces if w.name == name), None)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{name}")
+
+    stats = await asyncio.to_thread(intake_workspace, cfg, ws)
+    if stats.get("copied"):
+        # 收进来的 mp4 立刻登记成卡，不等下一轮后台刷新（人点了就要看到）
+        try:
+            import cardwatch
+            from db import get_db
+
+            root = Path(ws.root)
+            await asyncio.to_thread(
+                cardwatch.ensure_fresh,
+                cfg,
+                ws.name,
+                get_db(root),
+                root,
+                min_gap=0.0,
+                force=False,
+            )
+        except Exception as e:  # noqa: BLE001 —— 收编成功了，刷新失败不该让接口 500
+            stats.setdefault("problems", []).append(f"卡池刷新失败：{e}")
+    return stats
 
 
 @router.patch("/{name}")

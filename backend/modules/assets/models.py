@@ -78,6 +78,55 @@ class AssetRef(Base):
     created_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
 
 
+class AssetPrompt(Base):
+    """`X.png` 旁边 `X.prompt.json` 的缓存。**文件是真相，库里只是索引。**
+
+    外部 Agent 写文件、系统只读，所以这张表永远可以整表重建；
+    用户在 UI 里不能编辑它（要改就改文件）。
+    """
+
+    __tablename__ = "asset_prompt"
+
+    asset_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("index_assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    subject: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    variant: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    negative: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    caption: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    params_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    extra_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sidecar_path: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sidecar_mtime: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+
+
+class AssetWindow(Base):
+    """素材的适用区间：`seg_from` 起生效，`seg_to` 为空 = 一直有效。
+
+    🔴 一个资产可以有多行（修好了又坏了 → 5-9 / 16-∞）。区间是**后验的**，
+    用户随时改终点，所以它只能活在库里，不能写进文件名。
+    """
+
+    __tablename__ = "asset_window"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    asset_id: Mapped[str] = mapped_column(Text, nullable=False)
+    seg_from: Mapped[int] = mapped_column(Integer, nullable=False)
+    seg_to: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="manual")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+    updated_at: Mapped[str] = mapped_column(Text, nullable=False, default=now_iso)
+
+
+Index("ix_asset_window_asset", AssetWindow.asset_id)
+Index("ix_asset_window_from", AssetWindow.seg_from)
+
+
 class Collection(Base):
     __tablename__ = "collections"
 

@@ -1,5 +1,17 @@
 # -*- coding: utf-8 -*-
-"""抽卡 API：GET/PATCH cards、bulk、to-final（复制生成/NN.mp4，原件保留）。"""
+"""抽卡 API：GET/PATCH cards、bulk、to-final。
+
+「通过」（to-final）的语义 2026-10-24 改版：
+
+- 卡片 `status = final`（库里打标，唯一真相）；
+- **复制一份到 `{资产目录}/未分类/`**，文件名按命名模板现算（`01.1_成片.mp4`）；
+- 原件留在草稿不动 —— 一处真相（草稿）+ 一处交付（资产副本），不再有第三份。
+
+旧的 `生成/` 落点已废弃。`copy_to_final` 作为兼容字段保留，语义等同 `copy_to_asset`。
+
+🔴 顺手修掉的旧缺陷：勾选复制时会把 `chunk` 覆写成字符串 `"final"`，把 `1of3`
+这种块号永久丢掉。现在块号只**读**不写，卡片的 `chunk` 保持原值。
+"""
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +25,7 @@ from pydantic import BaseModel
 
 from config import get_config
 from db import get_db
+from naming import compose_shot, resolve_chunk, seg2, seg_from_path
 from repo import (
     bulk_update_status,
     card_file_path,
@@ -138,7 +151,84 @@ async def cards_bulk(body: BulkBody):
 
 
 class ToFinalBody(BaseModel):
-    copy_to_final: bool = False
+    """两个字段同义；谁先出现用谁。都不给 = **默认复制**。
+
+    默认复制是有意的：点「通过」的结果必须是「产出了一份能用的东西」，
+    而不是「库里多了个标记、文件还在草稿堆里自己找」。
+    """
+
+    copy_to_asset: Optional[bool] = None
+    copy_to_final: Optional[bool] = None
+
+    @property
+    def should_copy(self) -> bool:
+        for value in (self.copy_to_asset, self.copy_to_final):
+            if value is not None:
+                return bool(value)
+        return True
+
+
+def _deliver_to_uncategorized(cfg, card: dict, src: Path) -> dict:
+    """把通过的那一份复制进 `{资产目录}/未分类/`，并登记成资产。
+
+    同步阻塞（复制 + sha256），调用方负责扔进线程。返回
+    ``{"path", "name", "asset_id", "chunk_source", "problems"}``。
+
+    🔴 段号或文件名算不出来就**报错**，不猜：猜错会把片子归到别一段，
+    而画面照样出得来，没人会发现。
+    """
+    from modules.assets.roles import UNCATEGORIZED_DIR
+
+    root = cfg.ws_root()
+    asset_dir = cfg.subdir("asset")
+    if root is None or asset_dir is None:
+        raise HTTPException(status_code=400, detail="未激活工作区，或资产目录未配置")
+
+    name = Path(card["rel_path"]).name
+    seg = seg_from_path(name) or seg2(card.get("seg"))
+    if not seg:
+        raise HTTPException(
+            status_code=409,
+            detail=f"这条片子没有段号，无法按模板命名：{name}。请先在抽卡台给它指定段号。",
+        )
+    chunk, chunk_source = resolve_chunk(name, card.get("chunk"))
+    ext = src.suffix or ".mp4"
+
+    dst_dir = asset_dir / UNCATEGORIZED_DIR
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    dst = dst_dir / compose_shot(seg, chunk, "成片", ext)
+    if dst.exists() and dst.resolve() != src.resolve():
+        for seq in range(2, 100):
+            cand = dst_dir / compose_shot(seg, chunk, "成片", ext, seq=seq)
+            if not cand.exists():
+                dst = cand
+                break
+        else:
+            raise HTTPException(
+                status_code=409, detail=f"{dst.name} 的重名副本太多（已到 _99），请先清理"
+            )
+
+    if dst.resolve() != src.resolve():
+        shutil.copy2(src, dst)
+
+    problems: list[str] = []
+    asset_id: Optional[str] = None
+    try:
+        from modules.assets.indexer import index_single
+
+        asset_id = index_single(root, dst.relative_to(root).as_posix())
+    except Exception as exc:  # noqa: BLE001 —— 复制成功但登记失败，不能把已交付的文件藏起来
+        log.warning("[to-final] 资产登记失败：%s", exc)
+        problems.append(f"资产登记失败：{exc}")
+
+    return {
+        "path": str(dst),
+        "name": dst.name,
+        "asset_id": asset_id,
+        "chunk_source": chunk_source,
+        "problems": problems,
+    }
 
 
 @router.post("/{card_id}/to-final")
@@ -152,27 +242,18 @@ async def cards_to_final(card_id: int, body: ToFinalBody):
     if src is None or not src.exists():
         raise HTTPException(status_code=404, detail=f"卡片视频不存在：{card['rel_path']}")
 
+    delivered = None
+    if body.should_copy:
+        # 复制 + sha256 会占几十毫秒到几百毫秒，别卡住事件循环（健康检查与任务轮询都在这上面）
+        delivered = await asyncio.to_thread(_deliver_to_uncategorized, cfg, card, src)
+
     update_card(db, card_id, {"status": "final"})
 
-    if body.copy_to_final:
-        final_dir = cfg.subdir("final")
-        if final_dir is None:
-            raise HTTPException(status_code=400, detail="未激活工作区")
-        final_dir.mkdir(parents=True, exist_ok=True)
-        seg = card.get("seg")
-        dst_name = f"{seg}.mp4" if seg else f"card_{card_id}.mp4"
-        dst = final_dir / dst_name
-        # 若源已在最终位置（同名同路径）则跳过复制，避免自身覆盖冲突
-        if dst.resolve() == src.resolve():
-            pass
-        elif dst.exists():
-            raise HTTPException(
-                status_code=409,
-                detail=f"目标已存在且非源文件，拒绝覆盖：{dst}（如需替换请先手动删除或指定其它段号）",
-            )
-        else:
-            shutil.copy2(src, dst)
-        update_card(db, card_id, {"chunk": "final"})
-        return {"card": get_card(db, card_id), "copied_to": str(dst)}
-
-    return {"card": get_card(db, card_id), "copied_to": None}
+    return {
+        "card": get_card(db, card_id),
+        "copied_to": delivered["path"] if delivered else None,
+        "asset_id": delivered["asset_id"] if delivered else None,
+        "chunk_source": delivered["chunk_source"] if delivered else None,
+        "missing_chunk": bool(delivered and delivered["chunk_source"] == "none"),
+        "problems": delivered["problems"] if delivered else [],
+    }

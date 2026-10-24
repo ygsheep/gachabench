@@ -93,6 +93,7 @@ async def _watch_cards_loop() -> None:
     并写库；没变化时这一轮**零写入**。所以「有间隔」不等于「慢」，也不等于「占资源」。
     """
     import cardwatch
+    import intake
     from db import get_db
 
     while True:
@@ -108,6 +109,15 @@ async def _watch_cards_loop() -> None:
             # 从没建过索引的工作区不碰（get_db 会顺手把目录建出来）
             if not (root / cfg.index_dir / "cards.db").is_file():
                 continue
+            # 先收编再刷新：同一轮里把「外部目录的新片」和「刚收进来的片」一起登记，
+            # 否则人要等两个 tick 才看到东西。
+            if cfg.watch.enabled and list(getattr(ws, "watch_dirs", []) or []):
+                got = await asyncio.to_thread(intake.intake_workspace, cfg, ws)
+                if got.get("copied"):
+                    print(
+                        f"[收编] 从监听目录收进 {got['copied']} 个文件（{ws.name}）",
+                        flush=True,
+                    )
             stats = await asyncio.to_thread(
                 cardwatch.ensure_fresh,
                 cfg,
@@ -138,6 +148,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     bus.attach_loop(asyncio.get_running_loop())
     manager = get_scan_manager()
+
+    # 启动时补一次「命名规范」文档：外部 Agent 只读文件系统，
+    # 规范得在文件里，不能只躺在代码注释里。
+    try:
+        from config import get_config as _cfg
+        from naming_doc import ensure_for_workspace as _doc
+
+        _ws = _cfg().active_ws()
+        if _ws is not None:
+            _doc(_cfg(), _ws)
+    except Exception as e:  # noqa: BLE001 —— 文档失败不该拦住窗口
+        print(f"[文档] 命名规范 README 生成失败：{e}", flush=True)
     watch_stop = asyncio.Event()
     watch_task: asyncio.Task | None = None
     root = get_config().ws_root()
@@ -231,7 +253,7 @@ async def health():
 def _include_routers() -> None:
     from routers import (
         workspace, media, cards, split, generate, agent, locate, ffmpeg, workflows, assets,
-        system, config_api, export, library, search,
+        system, config_api, export, library, search, prep,
     )
     from modules.assets.api import media_router as asset_media_router, router as asset_index_router
     from modules.assets.ops_api import router as asset_ops_router
@@ -264,6 +286,7 @@ def _include_routers() -> None:
         export.router,
         library.router,
         search.router,
+        prep.router,
     ):
         app.include_router(router)
 

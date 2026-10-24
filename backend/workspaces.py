@@ -94,6 +94,7 @@ def inspect_root(root: Path, cfg: Config) -> dict:
             hits[key] = got
     if matched:
         hits["asset"] = matched
+    _drop_material_collision(hits)
 
     return {
         "root": str(root),
@@ -109,6 +110,18 @@ def inspect_root(root: Path, cfg: Config) -> dict:
 # ---------------------------------------------------------------------------
 # 目录骨架
 # ---------------------------------------------------------------------------
+
+def _drop_material_collision(names: dict[str, str]) -> None:
+    """同一个目录不能既是「资产」（总库）又是「素材」（按段备料）。
+
+    旧工作区里库还叫「素材」，重排之后 `material` 的默认名也是「素材」——
+    不拦住就会两个角色指向同一个目录，备料写进总库、归类又扫到备料。
+    这里把 material 置空（= 未确定），交给迁移接口或人工决定。
+    """
+    a = (names.get("asset") or "").strip().casefold()
+    m = (names.get("material") or "").strip().casefold()
+    if a and a == m:
+        names.pop("material", None)
 
 def build_workspace_dirs(root: Path, cfg: Config, names: dict[str, str]) -> dict[str, Path]:
     """按 names 在工作区根下创建内容目录 + .gachabench/。幂等；空名（未确定）跳过。"""
@@ -164,6 +177,7 @@ def create_workspace(
     else:
         hit = match_asset_dir(ws_root, cfg)
         resolved["asset"] = hit or cfg.folders.asset
+    _drop_material_collision(resolved)
 
     names = {k: v for k, v in resolved.items() if v}
     build_workspace_dirs(ws_root, cfg, names)
@@ -214,6 +228,7 @@ def open_workspace(
 
     resolved = cfg.folder_names_for(None)
     resolved["asset"] = detect_asset_dir(root, cfg, asset_dir)
+    _drop_material_collision(resolved)
 
     if create_missing:
         names = {k: v for k, v in resolved.items() if v}
@@ -267,9 +282,46 @@ def set_folders(name: str, mapping: dict[str, str]) -> WorkspaceEntry:
     raise WorkSpaceError(f"工作区不存在：{name}")
 
 
+WATCH_DIRS_MAX = 20
+
+
+def set_watch_dirs(name: str, dirs: list[str]) -> WorkspaceEntry:
+    """设置额外监听目录（收编源）。
+
+    全部校验通过才写配置：坏路径、相对路径、重复路径一律报错，不静默丢弃——
+    「我明明加了目录它却不收」比「加不上」难查得多。
+    传 `[]` = 清空（只靠工作区自己的草稿目录）。
+    """
+    cfg = get_config()
+    for ws in cfg.workspaces:
+        if ws.name != name:
+            continue
+        clean: list[str] = []
+        seen: set[str] = set()
+        for raw in dirs:
+            s = (raw or "").strip()
+            if not s:
+                continue
+            p = Path(s).expanduser()
+            if not p.is_absolute():
+                raise WorkSpaceError(f"监听目录必须是绝对路径：{s}")
+            if not p.is_dir():
+                raise WorkSpaceError(f"监听目录不存在：{s}")
+            key = str(p.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            clean.append(key)
+        if len(clean) > WATCH_DIRS_MAX:
+            raise WorkSpaceError(f"监听目录最多 {WATCH_DIRS_MAX} 个")
+        ws.watch_dirs = clean
+        set_config(cfg)
+        return ws
+    raise WorkSpaceError(f"工作区不存在：{name}")
+
+
 # 显示名的长度上限（界面上一行要放得下，也免得把下拉框撑爆）
 LABEL_MAX = 40
-
 
 def set_label(name: str, label: str) -> WorkspaceEntry:
     """只改「显示名」，不动目录名、不动库。

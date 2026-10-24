@@ -22,6 +22,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from config import get_config
+from naming import seg_from_path
 from modules.assets import roles, search, thumbs
 from modules.assets.models import (
     AssetMeta,
@@ -71,6 +72,10 @@ class AssetItem(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     thumb_url: str | None = None
     media_url: str = ""
+    # 镜头类的段号（`17.1_成片.mp4` → "17"）；素材类为 None。
+    # 镜头类**没有主体**（位置即身份），前端靠这个字段把它们按段分组，
+    # 而不是全部倒进「未归组」。
+    seg: str | None = None
 
 
 class AssetRefItem(BaseModel):
@@ -196,6 +201,7 @@ def _to_item(asset: IndexAsset, meta: AssetMeta | None) -> AssetItem:
         aliases=_json_list(meta.aliases_json if meta else None),
         thumb_url=thumb_url,
         media_url=media_url,
+        seg=seg_from_path(asset.name) if not subject else None,
     )
 
 

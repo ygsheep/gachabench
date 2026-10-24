@@ -67,6 +67,31 @@ export function GachaBoard({
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // 「通过」就在你看片的那一格上，不进审片器。
+  // 同一次请求做两件事：库里标正片 + 复制一份到 素材/未分类/。
+  const [passingId, setPassingId] = useState<number | null>(null)
+  const passCard = useMutation({
+    mutationFn: (card: CardsResp["cards"][number]) =>
+      api.post<{
+        card: CardsResp["cards"][number]
+        copied_to: string | null
+        missing_chunk?: boolean
+      }>(`/api/cards/${card.id}/to-final`, { copy_to_final: true }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["cards"] })
+      const name = r.copied_to?.split(/[\\/]/).pop()
+      toast.success(name ? `已通过 → 素材/未分类/${name}` : "已标为正片", {
+        description: r.missing_chunk
+          ? "缺块号，只写了段号；可在资产页补"
+          : name
+            ? "原件留在 草稿/"
+            : undefined,
+      })
+    },
+    onError: (e: Error) => toast.error(e.message),
+    onSettled: () => setPassingId(null),
+  })
+
   const cards = useMemo(() => data?.cards ?? [], [data])
   const rejectTags = data?.reject_tags ?? []
   const rows = useMemo(() => groupCards(cards), [cards])
@@ -337,7 +362,13 @@ export function GachaBoard({
                       card={face}
                       takeCount={b.takes.length}
                       shots={face.tags}
+                      stamp={passingId === face.id ? "final" : null}
                       onClick={() => openBlock(row.seg, b.chunk, face.id)}
+                      onPass={() => {
+                        setPassingId(face.id)
+                        passCard.mutate(face)
+                      }}
+                      passPending={passingId === face.id}
                     />
                   )
                 })}

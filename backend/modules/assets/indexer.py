@@ -20,7 +20,7 @@ from typing import Callable, Optional
 from sqlalchemy import select
 
 from config import get_config
-from modules.assets import roles, search
+from modules.assets import roles, search, sidecar
 from modules.assets.models import IndexAsset, IndexDir, now_iso
 from modules.platform.db import ensure_schema_once, session_scope
 from modules.platform.ids import ulid
@@ -132,6 +132,10 @@ def scan_workspace(
                         walk(child, Path(entry.path))
                     elif entry.is_file(follow_symlinks=False):
                         if unchanged:
+                            continue
+                        # sidecar（X.prompt.json）不是资产：它是图片的附属元数据。
+                        # 不跳过的话资产页会多出一堆 json 卡片，而且它们没有缩略图。
+                        if sidecar.is_sidecar(entry.name):
                             continue
                         rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
                         fst = entry.stat(follow_symlinks=False)
@@ -265,6 +269,8 @@ def scan_workspace(
 
         session.flush()
         search.rebuild_fts(session)
+        # 提示词 sidecar：文件是真相，这里只做缓存。单个坏文件不拖垮整轮。
+        sidecar_stats = sidecar.ingest(root, session)
 
     # P2：资产表落定后刷新引用表。引用扫描失败不能拖垮索引，只留日志。
     try:
@@ -276,6 +282,9 @@ def scan_workspace(
         print(f"[index] 引用扫描失败：{exc}")
 
     stats["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+    stats["sidecar"] = {
+        k: v for k, v in sidecar_stats.items() if k != "problems"
+    }
     return stats
 
 
@@ -341,4 +350,6 @@ def index_single(root: Path, rel_path: str) -> Optional[str]:
             asset.updated_at = now_iso()
         session.flush()
         search.sync_fts(session, asset.id)
+        # 上传/收编后立刻摄取它的 sidecar（若有），不必等下一次全量扫描
+        sidecar.ingest(root, session)
         return asset.id

@@ -39,8 +39,31 @@ export interface CardsResp {
   reject_tags: string[]
 }
 
+/**
+ * 收编一轮的账（`POST /api/workspaces/{name}/intake`）。
+ *
+ * `copied` 才是真的复制进来的；`unclaimed` = 收进来了但认不出段号或块号
+ * （原名保留、卡片标「未认领」）—— 这个数大于 0 时界面要提醒去抽卡台指定段号，
+ * 否则点「通过」会 409。
+ */
+export interface IntakeStats {
+  /** 参与这一轮的监听目录数（含不存在 / 被跳过的） */
+  dirs: number
+  /** 扫到的媒体文件数 */
+  scanned: number
+  copied: number
+  skipped: number
+  /** 复制时按模板改了名的条数 */
+  renamed: number
+  /** 认不出段号、原名保留的条数 */
+  unclaimed: number
+  problems: string[]
+}
+
 /** 五个内容角色的 key，与后端 FOLDER_KEYS 对齐 */
-export type FolderKey = "draft" | "final" | "prompt" | "storyboard" | "asset"
+/** 内容角色 key，与后端 FOLDER_KEYS 对齐（`source` 暂不在设置页暴露）。
+ *  asset = 所有素材的总库；material = 当前片段要用的备料区（按段分目录）。 */
+export type FolderKey = "draft" | "final" | "prompt" | "storyboard" | "asset" | "material"
 
 export interface Workspace {
   name: string
@@ -648,9 +671,10 @@ export interface IndexAssetItem {
   aliases: string[]
   thumb_url: string | null
   media_url: string
+  /** 镜头类的段号（`17.1_成片.mp4` → "17"）；素材类为 null。
+   *  镜头类没有主体（位置即身份），分组时按这个字段落「段 17」。 */
+  seg?: string | null
 }
-
-/** 资产被哪些文件引用（详情接口） */
 export interface IndexRef {
   id: string
   file_path: string

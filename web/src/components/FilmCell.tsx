@@ -11,6 +11,13 @@ import { STATUS_LABEL, fileName, seconds, shortStamp } from "@/lib/format"
  *
  * `card.missing`（文件已不在盘上）时不给 <video>：那会是一个永远黑的框，
  * 看起来像「播不动」，实际上是「东西没了」。改成虚线占位 + 一句实话。
+ *
+ * 「通过」位（2026-10-24）：右上角常驻一个低对比的小按钮，点一下即通过。
+ * 它必须**和看片在同一个格子上** —— 以前要「进审片器 → 找到按钮 → 确认」，
+ * 看的地方和做决定的地方不是同一个地方，这才是「步骤太多」的根。
+ *
+ * 外层是 div[role=button] 而不是 <button>：里面还要放一个真正的按钮，
+ * 交互元素不能嵌套。键盘 Enter/Space 仍然可用。
  */
 export function FilmCell({
   card,
@@ -21,6 +28,8 @@ export function FilmCell({
   active,
   index,
   onClick,
+  onPass,
+  passPending,
 }: {
   card: Card
   variant?: "cell" | "take"
@@ -30,11 +39,16 @@ export function FilmCell({
   active?: boolean
   index?: number
   onClick?: () => void
+  /** 给了才显示「通过」位；点一下 = 标为正片 + 复制到 素材/未分类/ */
+  onPass?: () => void
+  passPending?: boolean
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   const take = variant === "take"
   const rejected = card.status === "reject"
   const missing = !!card.missing
+  const passed = card.status === "final"
+  const canPass = !!onPass && !passed && !missing
 
   function play() {
     const v = ref.current
@@ -49,9 +63,16 @@ export function FilmCell({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick?.()
+        }
+      }}
       data-s={card.status}
       data-missing={missing || undefined}
       aria-label={`${card.seg ? card.seg + " 段 " : ""}${card.chunk ?? ""}，${STATUS_LABEL[card.status]}${
@@ -63,7 +84,7 @@ export function FilmCell({
       onFocus={play}
       onBlur={stop}
       className={cn(
-        "gb-cell min-w-0 text-left",
+        "gb-cell group/cell min-w-0 cursor-pointer select-none text-left",
         take
           ? "relative w-full"
           : "rounded-cell transition-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]"
@@ -110,8 +131,35 @@ export function FilmCell({
           {seconds(card.duration)}
         </span>
 
+        {canPass && (
+          <button
+            type="button"
+            disabled={passPending}
+            onClick={(e) => {
+              // 不能让点击冒泡到外层：那会顺手把审片器打开
+              e.stopPropagation()
+              onPass?.()
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+            onMouseEnter={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            title="通过：标为正片，并复制一份到 素材/未分类/"
+            aria-label="通过：标为正片，并复制一份到 素材/未分类/"
+            className={cn(
+              "absolute right-[5px] top-[5px] z-[3] grid h-[21px] place-items-center rounded-[4px] border px-[6px]",
+              "font-mono text-[10.5px] leading-none tracking-[0.06em] transition-[background-color,color,border-color,opacity] duration-100",
+              "border-white/30 bg-black/45 text-white/80",
+              "hover:border-white hover:bg-white hover:text-black",
+              "focus-visible:outline focus-visible:outline-1 focus-visible:outline-white",
+              passPending ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover/cell:opacity-100"
+            )}
+          >
+            {passPending ? "…" : "通过"}
+          </button>
+        )}
+
         {!take && !missing && (
-          <span className="pointer-events-none absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/cell:opacity-100 [button:hover>&]:opacity-100">
+          <span className="pointer-events-none absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover/cell:opacity-100">
             <span className="grid size-[34px] place-items-center rounded-full border border-white/50 bg-black/50">
               <Play className="ml-0.5 size-3.5 fill-white text-white" />
             </span>
@@ -143,6 +191,6 @@ export function FilmCell({
           </span>
         </div>
       )}
-    </button>
+    </div>
   )
 }

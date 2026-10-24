@@ -94,13 +94,20 @@ export function ReviewDesk({
 
   const toFinal = useMutation({
     mutationFn: (id: number) =>
-      api.post<{ card: Card; copied_to: string | null }>(`/api/cards/${id}/to-final`, {
-        copy_to_final: false,
-      }),
+      api.post<{ card: Card; copied_to: string | null; missing_chunk?: boolean }>(
+        `/api/cards/${id}/to-final`,
+        // 通过 = 交付一份到 素材/未分类/（不再落 生成/）。原件留在 草稿/。
+        { copy_to_final: true },
+      ),
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["cards"] })
-      toast.success(r.copied_to ? "已复到 生成/" : "已标为正片", {
-        description: r.copied_to ?? "原件留在 草稿/",
+      const name = r.copied_to?.split(/[\\/]/).pop()
+      toast.success(name ? `已通过 → 素材/未分类/${name}` : "已标为正片", {
+        description: r.missing_chunk
+          ? "缺块号，只写了段号；可在资产页补"
+          : name
+            ? "原件留在 草稿/"
+            : undefined,
       })
     },
     onError: (e: Error) => toast.error(e.message),
@@ -478,6 +485,8 @@ export function ReviewDesk({
                               shots={t.tags}
                               active={t.id === selected?.id}
                               onClick={() => setPickedId(t.id)}
+                              onPass={() => toFinal.mutate(t.id)}
+                              passPending={toFinal.isPending && toFinal.variables === t.id}
                             />
                           </div>
                         ))

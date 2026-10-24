@@ -518,3 +518,51 @@ input[type='range'].gb-range::-moz-range-thumb {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ============================================================
+   悬停预演面板（图片放大 / 视频试播）
+   开 = animation（opacity 0→1 同时 scale .96→1，160ms）
+   关 = transition（只 opacity，120ms，不位移）
+   🔴 关闭前组件必须摘掉 data-anim：animation 的 fill-mode: both 会把
+      opacity 钉在 1，摘不掉就永远关不上。
+   🔴 pointer-events: none —— 面板压住格子也不会挡住指针，
+      这是「贴格子外侧 12px」能成立的前提。
+   ============================================================ */
+.gb-pv {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: top left;
+  transition: opacity 120ms linear;
+  will-change: opacity, transform;
+}
+.gb-pv[data-open='1'] {
+  opacity: 1;
+}
+.gb-pv[data-anim='in'] {
+  animation: gb-pv-in 160ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+}
+@keyframes gb-pv-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 换格：只让内容淡换，容器不重建（否则每换一格都重新淡入，看起来就是闪） */
+.gb-pv-swap {
+  animation: gb-pv-swap var(--gb-pv-swap, 90ms) linear both;
+}
+@keyframes gb-pv-swap {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

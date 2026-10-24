@@ -8,6 +8,7 @@ import { seconds } from "@/lib/format"
 import { loadPrefs, savePrefs, type RunParams } from "@/lib/prefs"
 import { useApp } from "@/store/useApp"
 import { RefStrip } from "@/components/RefStrip"
+import { PrepPanel } from "@/components/PrepPanel"
 import { RunParamsBar, buildRunBody } from "@/components/RunParamsBar"
 import type {
   Job,
@@ -285,6 +286,15 @@ export function SplitPanel({
               </button>
             ))}
           </div>
+        </Card>
+
+        {/* 备料：这一段要的素材先摆进 素材/{段}/，跑片优先取那里的那份。
+            换素材 = 换掉备料区里的同名文件，提示词不用改。 */}
+        <Card
+          title="备料"
+          desc="这一段提示词里写到的每一样素材，都会被摆进 素材/{段}/。跑片时优先取那里的一份 —— 想换某张图，直接换掉备料区里的同名文件，提示词一个字都不用改。"
+        >
+          <PrepPanel seg={cur} />
         </Card>
 
         <Card

@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner"
 import {
   Check,
+  ChevronDown,
   ClipboardCopy,
   File,
   FileArchive,
@@ -23,6 +24,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Trash2,
   Upload,
   X,
@@ -32,6 +34,8 @@ import { AssetUploadDialog, type UploadTarget } from "@/components/AssetUploadDi
 import { AssetOpsDialog, type AssetOpsTarget } from "@/components/AssetOpsDialog"
 import { AudioPreview, PinButton, VoiceBars, fmt, useAudioPlayer } from "@/components/AudioCell"
 import { MarkdownView } from "@/components/MarkdownView"
+import { PreviewPortal } from "@/components/PreviewPortal"
+import { InboxStrip } from "@/components/InboxStrip"
 import { copyImagesToClipboard } from "@/lib/clipboard"
 import { ApiError } from "@/lib/api"
 import {
@@ -53,6 +57,8 @@ import {
   restoreTrash,
 } from "@/lib/opsApi"
 import { humanSize, shortStamp } from "@/lib/format"
+import { hideHoverPreview, showHoverPreview, suppressHoverPreview } from "@/lib/hoverPreview"
+import { loadPrefs } from "@/lib/prefs"
 import { filesFromDataTransfer, isFileDrag, useAssetUpload } from "@/lib/assetUpload"
 import { useAssetEvents } from "@/lib/useAssetEvents"
 import { useActiveWorkspace } from "@/lib/workspace"
@@ -94,8 +100,6 @@ const ROLE_LABEL: Record<string, string> = {
 
 const COLLECTION_ORDER = ["recent", "missing", "unreferenced", "large", "trashed"]
 
-const OUTLINE_BTN =
-  "inline-flex h-8 items-center gap-1.5 rounded-ctl border border-rule bg-cell px-3 text-[12.5px] font-medium transition-all hover:bg-hi active:translate-y-px"
 const INSPECTOR_BTN =
   "inline-flex h-7 items-center gap-1.5 rounded-ctl border border-rule bg-cell px-2.5 text-[12px] font-medium text-ash transition-all hover:bg-hi hover:text-paper active:translate-y-px"
 
@@ -109,6 +113,17 @@ function subjectOf(name: string): string {
   const stem = name.replace(/\.[^.]+$/, "")
   const first = stem.split(/[_\s]+/)[0]
   return first || "未归组"
+}
+
+/** 「段 17」→ 17；不是段分组返回 null（用于按位置排序，而不是按数量） */
+function segNo(name: string): number | null {
+  const m = /^段\s*(\d+)$/.exec(name.trim())
+  return m ? Number(m[1]) : null
+}
+
+/** 一个资产归到哪一组：有主体用主体；镜头类按段；都没有才是「未归组」 */
+function groupNameOf(it: { subject: string; seg?: string | null }): string {
+  return it.subject.trim() || (it.seg ? `段 ${it.seg}` : "未归组")
 }
 
 /**
@@ -132,6 +147,9 @@ export function AssetIndex({
 
   /* ---------------- 视图模式 / 多选 / 弹窗 ---------------- */
   const [mode, setMode] = useState<"grouped" | "flat">("grouped")
+  /* 筛选面板默认收起：集合 chips「最近修改 / 缺失引用 / 未被引用 / 大文件 / 回收站」
+     属于「存量体检」，不是每次进页面都要过一眼的东西。收起来把高度还给资产网格。 */
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [multi, setMulti] = useState<Set<string>>(() => new Set())
   const [dlg, setDlg] = useState<UploadTarget | null>(null)
   const [opsTarget, setOpsTarget] = useState<AssetOpsTarget | null>(null)
@@ -292,7 +310,9 @@ export function AssetIndex({
     const byRole = new Map<string, Map<string, IndexAssetItem[]>>()
     for (const it of items) {
       const role = it.role || "other"
-      const subj = it.subject.trim() || "未归组"
+      /* 镜头类没有主体（位置即身份）：按段分组，别把整批成片全倒进「未归组」。
+         段号由后端从文件名解析（`17.1_成片.mp4` → "17"），前端不做文件名猜测。 */
+      const subj = groupNameOf(it)
       if (!byRole.has(role)) byRole.set(role, new Map())
       const m = byRole.get(role)!
       if (m.has(subj)) m.get(subj)!.push(it)
@@ -311,7 +331,17 @@ export function AssetIndex({
           subdir: list[0]?.dir_path ?? "",
           tags: [...new Set(list.flatMap((i) => i.tags))].slice(0, 4),
         }))
-        .sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name))
+        .sort((a, b) => {
+          // 「段 N」按数字排，和按数量的排法分开：段是位置，不该因为片子多就跳到前面
+          const sa = segNo(a.name)
+          const sb = segNo(b.name)
+          if (sa != null || sb != null) {
+            if (sa == null) return 1
+            if (sb == null) return -1
+            return sa - sb
+          }
+          return b.items.length - a.items.length || a.name.localeCompare(b.name)
+        })
       const n = groups.reduce((a, g) => a + g.items.length, 0)
       return { role, groups, n }
     })
@@ -505,7 +535,7 @@ export function AssetIndex({
   useEffect(() => {
     incomingRef.current = (files, subject) => {
       if (subject) {
-        const it = items.find((i) => (i.subject.trim() || "未归组") === subject)
+        const it = items.find((i) => groupNameOf(i) === subject)
         quickUpload(subject, it?.dir_path ?? "", files)
       } else {
         setDlg({ mode: "attach", files })
@@ -581,89 +611,62 @@ export function AssetIndex({
   const listError = listQ.error as Error | null
   const noWorkspace = !!listError && listError instanceof ApiError && listError.status === 400
   const roleTotal = roleRows.reduce((a, r) => a + r.count, 0)
+  /* 收起的筛选面板里生效了几条：0 就不显示数字，避免「筛选 0」这种噪声 */
+  const filterCount = (search.collection ? 1 : 0) + (duplicatesMode ? 1 : 0)
   const trashEntry = trashedMode
     ? trashEntries.find((t) => t.asset_id === assetId) ?? null
     : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* ================= 页头 ================= */}
-      <header className="flex flex-wrap items-end gap-x-3.5 gap-y-2 px-6 pb-3.5 pt-5">
-        <div className="max-w-[82ch]">
-          <h1 className="text-[19px] font-semibold leading-tight">资产管理</h1>
-          <p className="pt-0.5 text-[12.5px] text-ash">
-            参考图和参考音频是 <span className="font-mono">&lt;Picture N&gt;</span> /{" "}
-            <span className="font-mono">&lt;Audio N&gt;</span> 的锚。索引覆盖整个工作区，文件名主体名相同即归为同一套。
-          </p>
-          <p className="pt-0.5 text-[11.5px] text-ash-dim">
-            点缩略图打开检查器 · 勾选后顶部出现操作条 · 拖文件到某一套直接存入
-          </p>
-        </div>
-        <span className="flex-1" />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={scanStart.isPending || scanRunning}
-            onClick={() => scanStart.mutate()}
-            title="重新递归扫描整个工作区并增量入库"
-            className={cn(OUTLINE_BTN, "disabled:opacity-45")}
-          >
-            <RefreshCw
-              className={cn("size-3.5", (scanStart.isPending || scanRunning) && "animate-spin")}
-            />
-            重扫
-          </button>
-          <button
-            type="button"
-            onClick={() => setDlg({ mode: "attach" })}
-            className={OUTLINE_BTN}
-          >
-            <Upload className="size-3.5" />
-            上传资产
-          </button>
-          <button
-            type="button"
-            onClick={() => setDlg({ mode: "new" })}
-            className="inline-flex h-8 items-center gap-1.5 rounded-ctl bg-paper px-3 text-[12.5px] font-medium text-[#131313] transition-transform hover:bg-white active:translate-y-px active:scale-[0.99]"
-          >
-            <Plus className="size-3.5" />
-            新建资产
-          </button>
-        </div>
-      </header>
+      {/* 页头已并入工具条：这一页原本有 4 条横向 chrome（页头 / 收件箱 / 目录 / 筛选两行），
+          资产网格只剩一半高度。标题留一个词就够，说明进 title。 */}
 
-      {/* ================= 目录 tab：素材（当前集） / 资产（全量库） ================= */}
-      {!specialMode && (
-        <div className="flex items-center gap-1 px-6 pb-3">
-          {DIR_TABS.map((t) => {
-            const active = activeDir === t
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => onSearchChange({ dir: t, role: undefined, collection: undefined, panel: undefined })}
-                aria-pressed={active}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-ctl border px-3.5 text-[12.5px] font-medium transition-colors",
-                  active
-                    ? "border-wash-line bg-paper text-[#131313]"
-                    : "border-rule-soft bg-cell text-ash hover:bg-hi hover:text-paper"
-                )}
-              >
-                {t === "素材" ? <Images className="size-3.5" strokeWidth={1.7} /> : <LayoutGrid className="size-3.5" strokeWidth={1.7} />}
-                {t}
-                <span className="font-mono text-[10.5px] opacity-60">
-                  {t === "素材" ? "当前集" : "全量"}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {/* 目录 tab 已并入下面的工具条 —— 单独占一行不值得，它只有两个值 */}
 
-      {/* ================= 筛选第一行 ================= */}
-      <div className="flex flex-wrap items-center gap-2.5 px-6 pb-2.5">
-        <div className="relative w-[236px] max-[980px]:w-[160px]">
+      {/* ================= 工具条：目录 + 搜索 + 筛选（一行） =================
+          以前这里是「目录 tab 一行 + 筛选两行 + 索引根一行」，光控件就吃掉 200px 高。
+          现在压成一行，集合 chips 收进「筛选」面板，索引根跟着面板走 —— 高度还给网格。 */}
+      <div className="flex flex-wrap items-center gap-2 px-6 pb-1.5">
+        <h1
+          className="flex-none text-[15px] font-semibold leading-none"
+          title="参考图 / 参考音频是 <Picture N> / <Audio N> 的锚；索引覆盖整个工作区，文件名主体名相同即归为一套；把文件拖到某一套上直接存入，或复制图片后按 Ctrl+V。"
+        >
+          资产管理
+        </h1>
+        <span className="h-4 w-px flex-none bg-rule-soft" />
+        {!specialMode && (
+          <div
+            role="group"
+            aria-label="目录"
+            className="inline-flex rounded-ctl border border-rule bg-panel p-0.5"
+          >
+            {DIR_TABS.map((t) => {
+              const active = activeDir === t
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    onSearchChange({ dir: t, role: undefined, collection: undefined, panel: undefined })
+                  }
+                  aria-pressed={active}
+                  className={cn(
+                    "inline-flex h-[26px] items-center gap-1.5 rounded-[4px] px-2.5 text-[12px] transition-colors",
+                    active ? "bg-hi font-medium text-paper" : "text-ash hover:text-paper"
+                  )}
+                >
+                  {t}
+                  <span className="font-mono text-[10.5px] opacity-55">
+                    {t === "素材" ? "当前集" : "全量"}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="relative w-[220px] max-[980px]:w-[140px]">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-ash-dim" />
           <input
             value={qInput}
@@ -680,7 +683,7 @@ export function AssetIndex({
               value={search.role ?? ""}
               onChange={(e) => onSearchChange({ role: e.target.value || undefined })}
               aria-label="按角色筛选"
-              className="h-8 w-[128px] rounded-ctl border border-rule bg-cell px-2 text-[12.5px] outline-none focus:border-wash-line"
+              className="h-8 w-[120px] rounded-ctl border border-rule bg-cell px-2 text-[12.5px] outline-none focus:border-wash-line"
             >
               <option value="">角色：全部</option>
               {roleRows.map((r) => (
@@ -695,7 +698,7 @@ export function AssetIndex({
               <div
                 role="group"
                 aria-label="视图模式"
-                className="inline-flex overflow-hidden rounded-ctl border border-rule bg-cell"
+                className="inline-flex rounded-ctl border border-rule bg-panel p-0.5"
               >
                 {([
                   { key: "grouped", label: "分组", Icon: LayoutGrid },
@@ -707,7 +710,7 @@ export function AssetIndex({
                     aria-pressed={mode === key}
                     onClick={() => setMode(key)}
                     className={cn(
-                      "inline-flex h-8 items-center gap-1 px-2.5 text-[11.5px] transition-colors",
+                      "inline-flex h-[26px] items-center gap-1 rounded-[4px] px-2 text-[11.5px] transition-colors",
                       mode === key
                         ? "bg-hi font-medium text-paper"
                         : "text-ash hover:bg-hi hover:text-paper"
@@ -719,6 +722,26 @@ export function AssetIndex({
                 ))}
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              title="集合 / 重复文件 / 索引根"
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-ctl border px-2.5 text-[12px] transition-colors",
+                filtersOpen || filterCount > 0
+                  ? "border-wash-line bg-wash font-medium text-paper"
+                  : "border-rule bg-cell text-ash hover:bg-hi hover:text-paper"
+              )}
+            >
+              <SlidersHorizontal className="size-3.5" strokeWidth={1.7} />
+              筛选
+              {filterCount > 0 && <span className="font-mono text-[10.5px]">{filterCount}</span>}
+              <ChevronDown
+                className={cn("size-3.5 transition-transform", filtersOpen && "rotate-180")}
+              />
+            </button>
           </>
         )}
 
@@ -731,18 +754,45 @@ export function AssetIndex({
             旧结果 · 更新中
           </span>
         )}
-        {listRoot && (
-          <span
-            className="max-w-[52ch] truncate font-mono text-[11px] text-ash-dim"
-            title={listRoot}
-          >
-            索引根 <b className="text-ash">{listRoot}</b>
-          </span>
-        )}
+
+        {/* 两个次要动作收成图标（有 title 与 aria-label），把宽度让给筛选；
+            只有「新建资产」保留文字——它是这一页唯一的主动作。 */}
+        <button
+          type="button"
+          disabled={scanStart.isPending || scanRunning}
+          onClick={() => scanStart.mutate()}
+          title="重扫：重新递归扫描整个工作区并增量入库"
+          aria-label="重扫"
+          className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper disabled:opacity-45"
+        >
+          <RefreshCw
+            className={cn("size-3.5", (scanStart.isPending || scanRunning) && "animate-spin")}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDlg({ mode: "attach" })}
+          title="上传资产：把文件挂到选中的那一套上"
+          aria-label="上传资产"
+          className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper"
+        >
+          <Upload className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDlg({ mode: "new" })}
+          className="inline-flex h-8 flex-none items-center gap-1.5 rounded-ctl bg-paper px-3 text-[12.5px] font-medium text-[#131313] transition-transform hover:bg-white active:translate-y-px active:scale-[0.99]"
+        >
+          <Plus className="size-3.5" />
+          新建资产
+        </button>
       </div>
 
-      {/* ================= 筛选第二行：集合 chips + 多选操作条 ================= */}
-      <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
+      {/* ================= 筛选面板：集合 chips + 重复 + 多选操作条 =================
+          默认收起；只要勾选了资产就强制展开 —— 操作条必须看得见。
+          收起时的状态由工具条上那个「筛选 N」按钮承担，不至于让人不知道有筛过。 */}
+      {(filtersOpen || multi.size > 0) && (
+        <div className="flex flex-wrap items-center gap-2 px-6 pb-2.5">
         <div className="inline-flex rounded-ctl border border-rule bg-panel p-0.5">
           <button
             type="button"
@@ -861,7 +911,25 @@ export function AssetIndex({
             </button>
           </>
         )}
-      </div>
+
+        {/* 索引根原来在工具条上，属于「知道一次就够」的信息，跟着面板收起 */}
+        <span className="flex-1" />
+        {listRoot && (
+          <span
+            className="max-w-[46ch] truncate font-mono text-[10.5px] text-ash-dim"
+            title={listRoot}
+          >
+            索引根 {listRoot}
+          </span>
+        )}
+        </div>
+      )}
+
+      {/* ============ 收件箱：草稿里还没定性的片子 ============
+          位置在「工具条 + 筛选面板」之后、资产网格之前：展开筛选时面板紧贴它的开关，
+          收件箱又仍然挡在资产前面（「置顶」是挡在资产前，不是盖住页面标题）。
+          重复 / 回收站这类专项视图里不显示。 */}
+      {!specialMode && !trashedMode && <InboxStrip workspace={workspace} />}
 
       {/* ================= 主区 + 检查器 ================= */}
       <div className="flex min-h-0 flex-1 max-[980px]:flex-col">
@@ -929,20 +997,40 @@ export function AssetIndex({
             </div>
           ) : !total ? (
             <div className="m-4 rounded-panel border border-dashed border-rule bg-panel px-6 py-12 text-center">
-              <h3 className="text-[15px] font-medium">素材目录还是空的</h3>
+              <h3 className="text-[15px] font-medium">这个目录里还没有资产</h3>
               <p className="mx-auto mt-2 max-w-[52ch] text-[12.5px] leading-relaxed text-ash">
                 上传人物定妆、场景图、配音，文件名会按{" "}
                 <span className="font-mono">主体名_用途.png</span> 自动落名，主体名相同即归为一套。
                 也可以直接拖文件进来，或复制图片后按 <span className="font-mono">Ctrl+V</span>。
               </p>
-              <button
-                type="button"
-                onClick={() => setDlg({ mode: "new" })}
-                className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-ctl bg-paper px-3 text-[12.5px] font-medium text-[#131313] transition-transform hover:bg-white active:translate-y-px"
-              >
-                <Upload className="size-3.5" />
-                上传第一个资产
-              </button>
+              {/* 盘上有文件却空着，八成是索引旧了（改过目录名就会这样）——给一条能自己动手的路 */}
+              <p className="mx-auto mt-2 max-w-[52ch] text-[11.5px] leading-relaxed text-ash-dim">
+                盘上明明有文件却看不到：先点重扫，新文件能补上；如果还是空着，就是索引把这些行标成了「缺失」却没被清掉 —— 那是索引侧的问题，文件并没有丢。
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDlg({ mode: "new" })}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-ctl bg-paper px-3 text-[12.5px] font-medium text-[#131313] transition-transform hover:bg-white active:translate-y-px"
+                >
+                  <Upload className="size-3.5" />
+                  上传第一个资产
+                </button>
+                <button
+                  type="button"
+                  disabled={scanStart.isPending || scanRunning}
+                  onClick={() => scanStart.mutate()}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-ctl border border-rule bg-cell px-3 text-[12.5px] font-medium transition-colors hover:bg-hi disabled:opacity-45"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "size-3.5",
+                      (scanStart.isPending || scanRunning) && "animate-spin"
+                    )}
+                  />
+                  重扫
+                </button>
+              </div>
             </div>
           ) : !items.length ? (
             <div className="m-4 rounded-panel border border-dashed border-rule bg-panel px-6 py-12 text-center">
@@ -1178,6 +1266,9 @@ export function AssetIndex({
 
       {preview && <MediaPreview item={preview} onClose={() => setPreview(null)} />}
 
+      {/* 悬停预演面板：整个资产页只挂一个，状态在 lib/hoverPreview 的仲裁器里 */}
+      <PreviewPortal />
+
       {opsTarget && (
         <AssetOpsDialog
           target={opsTarget}
@@ -1384,21 +1475,72 @@ function AssetCell({
       item.media_kind === "image" ||
       item.media_kind === "text")
   const ap = useAudioPlayer(item.media_url)
+
+  /* 悬停预演（图片放大 / 视频试播）。音频格不走这条：它有自己的悬停试听 + 固定钮，
+     再叠一块放大面板反而挡住声部块。判据在事件里现读，设置页一改下一格就生效。 */
+  const canHoverPreview =
+    !missing && !!item.media_url && (item.media_kind === "image" || item.media_kind === "video")
+
+  function hoverEnter(e: React.MouseEvent<HTMLDivElement>) {
+    if (isAudio) {
+      ap.play()
+      return
+    }
+    if (!canHoverPreview || !loadPrefs().preview.hover) return
+    const el = e.currentTarget
+    showHoverPreview({
+      kind: item.media_kind === "video" ? "video" : "image",
+      src: item.media_url,
+      name: item.name,
+      meta: [item.width && item.height ? `${item.width}×${item.height}` : "", humanSize(item.size)]
+        .filter(Boolean)
+        .join(" · "),
+      width: item.width,
+      height: item.height,
+      // 格子被卸载（筛选 / 切视图）时返回 null，面板据此收掉，不会僵在屏幕中间
+      anchor: () => {
+        if (!el.isConnected) return null
+        const r = el.getBoundingClientRect()
+        return {
+          left: r.left,
+          top: r.top,
+          right: r.right,
+          bottom: r.bottom,
+          width: r.width,
+          height: r.height,
+        }
+      },
+    })
+  }
+
+  function hoverLeave() {
+    if (isAudio) {
+      ap.stop()
+      return
+    }
+    if (canHoverPreview) hideHoverPreview()
+  }
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={onOpen}
+      onClick={(e) => {
+        // 点过就别再弹了（面板会一直挡着检查器），鼠标移开后自动解禁
+        if (canHoverPreview) suppressHoverPreview()
+        onOpen(e)
+      }}
       onDoubleClick={
         canPreview
           ? (e) => {
               e.stopPropagation()
+              suppressHoverPreview()
               onPreview(item)
             }
           : undefined
       }
-      onMouseEnter={isAudio ? ap.play : undefined}
-      onMouseLeave={isAudio ? ap.stop : undefined}
+      onMouseEnter={hoverEnter}
+      onMouseLeave={hoverLeave}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return
         if (e.key === "Enter") {
@@ -1413,9 +1555,11 @@ function AssetCell({
       title={
         isAudio
           ? "悬停即试听 · 点固定钮钉住播放"
-          : canPreview
-            ? "双击预览"
-            : undefined
+          : canHoverPreview
+            ? "悬停放大 · 双击开大窗"
+            : canPreview
+              ? "双击预览"
+              : undefined
       }
       className={cn(
         "group relative h-[168px] cursor-pointer overflow-hidden rounded-cell border bg-cell transition-colors",

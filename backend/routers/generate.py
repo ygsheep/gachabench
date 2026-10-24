@@ -27,6 +27,8 @@ import comfy
 import ffmpeg_tools
 import ingest
 import splitter
+from naming import seg2
+from prep import prep_path
 from repo import (
     create_job,
     delete_job,
@@ -315,7 +317,7 @@ async def _run_job(job_id, workspace, plan, chunk_info, text, body, wf_path=None
         input_dir = Path(cfg.comfyui.input_dir)
         filled = [
             fn for fn in refs
-            if not (input_dir / fn).is_file() and _materialize(cfg, db, fn, "image").get("copied")
+            if not (input_dir / fn).is_file() and _materialize(cfg, db, fn, "image", seg=plan["seg"]).get("copied")
         ]
         if filled:
             progress(f"从资产库补齐 {len(filled)} 张参考图：{'、'.join(filled)}", 0)
@@ -330,7 +332,7 @@ async def _run_job(job_id, workspace, plan, chunk_info, text, body, wf_path=None
             for fn in audio_list:
                 if (input_dir / fn).is_file():
                     continue
-                if _materialize(cfg, db, fn, "audio").get("copied"):
+                if _materialize(cfg, db, fn, "audio", seg=plan["seg"]).get("copied"):
                     filled_a.append(fn)
             if filled_a:
                 progress(f"从资产库补齐 {len(filled_a)} 个参考音频：{'、'.join(filled_a)}", 0)
@@ -587,14 +589,43 @@ def _asset_match(db, workspace: str, filename: str, kind: str = "image") -> dict
     return {"found": False, "name": None, "rel": None, "fuzzy": False, "url": None}
 
 
-def _materialize(cfg, db, expected: str, kind: str, source_rel: Optional[str] = None) -> dict:
+def _materialize(
+    cfg,
+    db,
+    expected: str,
+    kind: str,
+    source_rel: Optional[str] = None,
+    seg: Optional[str] = None,
+) -> dict:
     """把资产库里的一个文件复制成 input_dir/<expected>，让提示词里的引用能解析到。
 
     这是「参考默认从资产库补齐」的唯一落地点：提示词里写死了文件名，
     所以必须**按那个文件名**落到 ComfyUI input 目录 —— 宽松命中时也一样，
     等于把最像的那张顶上去（前端会标明是"近似匹配"）。
+
+    🔴 先看**备料区** `{素材}/{段}/<expected>`：那里放的是「这一段就是要用这张」，
+    优先级高于在整库里的模糊匹配。人在备料区换掉一个同名文件，跑片就该用那一份。
     """
     input_dir = Path(cfg.comfyui.input_dir)
+
+    if source_rel is None and seg:
+        staged = prep_path(cfg, seg, expected)
+        if staged is not None:
+            dst0 = input_dir / expected
+            try:
+                if staged.resolve() != dst0.resolve():
+                    input_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(staged, dst0)
+            except OSError as e:
+                return {"filename": expected, "copied": False, "reason": f"复制失败：{e}"}
+            return {
+                "filename": expected,
+                "copied": True,
+                "overwrote": False,
+                "source": f"备料区/{seg2(seg)}/{expected}",
+                "from_prep": True,
+            }
+
     asset_dir = cfg.subdir("asset")
     if asset_dir is None:
         return {"filename": expected, "copied": False, "reason": "当前工作区没有资产目录"}
@@ -795,7 +826,7 @@ async def refs_select(plan_id: int, body: RefSelectBody):
         expected = amap.get(item.n) if item.kind == "audio" else pic_by_n.get(item.n)
         if not expected:
             raise HTTPException(status_code=400, detail=f"本块里没有 {item.kind} #{item.n}")
-        out.append({"n": item.n, "kind": item.kind, **_materialize(cfg, db, expected, item.kind, item.source_rel)})
+        out.append({"n": item.n, "kind": item.kind, **_materialize(cfg, db, expected, item.kind, item.source_rel, seg=plan["seg"])})
     return {"items": out}
 
 

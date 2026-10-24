@@ -42,20 +42,37 @@ class FoldersConfig(BaseModel):
     final: str = "生成"
     prompt: str = "提示词"
     storyboard: str = "分镜表"
-    asset: str = "素材"
+    # 2026-10-24 职责重排：
+    # asset    = **所有素材的总库**（长期、全量、可复用），按 类别/主体 归档
+    # material = **当前片段要用的备料区**，按段分目录：素材/01/、素材/02/…
+    #            里面放的文件名 == 提示词里 <Picture N> 写的那个名字，
+    #            所以想换素材直接换文件，提示词一个字都不用改。
+    asset: str = "资产"
+    material: str = "素材"
     # 本地原著 / 剧本库（C2）。已有工作区不重建骨架，导入时按需补建。
     source: str = "原著"
 
 
-# 六个内容角色目录
-FOLDER_KEYS: tuple[str, ...] = ("draft", "final", "prompt", "storyboard", "asset", "source")
+# 七个内容角色目录
+FOLDER_KEYS: tuple[str, ...] = (
+    "draft",
+    "final",
+    "prompt",
+    "storyboard",
+    "asset",
+    "material",
+    "source",
+)
 
 # 资产目录自动匹配的候选名（按顺序优先命中，大小写不敏感）。
-# 每个人习惯不同：有人叫「素材」，有人叫「资产」，也有人用英文 assets/media。
+# 2026-10-24：「资产」排在「素材」前面 —— 重排之后 asset 的角色是总库，
+# 而「素材」已经专指按段分目录的备料区。旧工作区（库还叫「素材」）没迁移时，
+# 靠 candidate 回落仍能认出来，不会变成「找不到资产目录」。
 DEFAULT_ASSET_DIR_CANDIDATES: list[str] = [
-    "素材", "资产", "素材库", "资产库", "素材文件", "资产文件", "参考图", "参考",
+    "资产", "资产库", "资产文件",
     "assets", "asset", "materials", "material", "media", "resources", "resource",
     "references", "reference", "refs", "images", "img",
+    "素材", "素材库", "素材文件", "参考图", "参考",
 ]
 
 
@@ -157,6 +174,10 @@ class WorkspaceEntry(BaseModel):
     # 值为空串表示「该角色目录尚未确定」（打开项目时未匹配到资产目录名，
     # 需前端手动选择）。资产目录尤其常见：有人叫「素材」有人叫「资产」。
     folders: dict[str, str] = Field(default_factory=dict)
+    # 额外监听目录（绝对路径，工作区之外）：别的软件 / 别的 ComfyUI 落盘目录。
+    # 新片会被**复制**进 草稿/（收编），不就地索引 —— 见 intake.py 顶部说明。
+    # 🔴 工作区内部的目录会被拒绝：那等于把 草稿/ 里的片子再收一遍，无限增殖。
+    watch_dirs: list[str] = Field(default_factory=list)
 
     @property
     def title(self) -> str:

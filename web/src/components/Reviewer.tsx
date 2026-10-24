@@ -174,13 +174,19 @@ export function Reviewer({
 
   const toFinal = useMutation({
     mutationFn: (copy: boolean) =>
-      api.post<{ card: Card; copied_to: string | null }>(`/api/cards/${card!.id}/to-final`, {
-        copy_to_final: copy,
-      }),
+      api.post<{ card: Card; copied_to: string | null; missing_chunk?: boolean }>(
+        `/api/cards/${card!.id}/to-final`,
+        { copy_to_final: copy },
+      ),
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["cards"] })
-      toast.success(r.copied_to ? `已复到 生成/${seg}.mp4` : "已标为正片", {
-        description: r.copied_to ? "原件留在 草稿/" : `${seg} 段 ${chunk} · 原件留在 草稿/`,
+      const name = r.copied_to?.split(/[\\/]/).pop()
+      toast.success(name ? `已通过 → 素材/未分类/${name}` : "已标为正片", {
+        description: r.missing_chunk
+          ? "缺块号，只写了段号；可在资产页补"
+          : name
+            ? `${seg} 段 ${chunk} · 原件留在 草稿/`
+            : `${seg} 段 ${chunk} · 原件留在 草稿/`,
       })
     },
     onError: (e: Error) => toast.error(e.message),

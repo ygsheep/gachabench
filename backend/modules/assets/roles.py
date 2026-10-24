@@ -14,6 +14,7 @@ from config import DEFAULT_ASSET_DIR_CANDIDATES
 
 ROLE_LABELS: list[tuple[str, str]] = [
     ("asset", "资产"),
+    ("material", "素材"),
     ("storyboard", "分镜"),
     ("prompt", "提示词"),
     ("final", "成片"),
@@ -33,6 +34,11 @@ TEXT_EXT = {
 ARCHIVE_EXT = {".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz"}
 
 SKIP_DIRS = {".gachabench", ".git", "node_modules", "__pycache__"}
+
+# 「通过」的交付落点：`{资产目录}/未分类/`。
+# 刻意不做「自动归类到 人物/场景」：通过那一刻你只知道「这片子能用」，
+# 还不知道它属于谁的哪套衣服；提前猜归类 = 制造第二个错，比不分类更糟。
+UNCATEGORIZED_DIR = "未分类"
 
 _SPLIT_RE = re.compile(r"[_\s]+")
 
@@ -102,6 +108,15 @@ def role_for_path(rel_path: str, folder_names: dict[str, str]) -> str:
 
 
 def subject_for_name(name: str) -> str:
+    """文件名第一段 = 主体名。
+
+    但**镜头类没有主体**：`17.1_成片.mp4` 的第一段是段号，把它当主体会在
+    资产页长出一个叫 `17.1` 的假角色。位置即身份，主体进库/进 UI，不进名字。
+    """
+    from naming import parse_shot
+
+    if parse_shot(name) is not None:
+        return ""
     stem = Path(name).stem
     parts = [p for p in _SPLIT_RE.split(stem) if p]
     return parts[0] if parts else ""

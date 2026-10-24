@@ -25,7 +25,9 @@ const FOLDER_LABEL: Record<FolderKey, string> = {
   final: "生成",
   prompt: "提示词",
   storyboard: "分镜表",
-  asset: "素材",
+  // 2026-10-24：asset 是总库，material 是「当前片段要用的」备料区（素材/01、素材/02…）
+  asset: "资产",
+  material: "素材",
 }
 
 /** 跑片参数的合法区间 —— 与后端 `routers/config_api.py` 的钳制一致。
@@ -83,6 +85,8 @@ export function SettingsPage({ workspace }: { workspace: string | null }) {
         <RunSection cfg={cfgQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["config"] })} />
         <WorkflowSection cfg={cfgQ.data} workflows={wfQ.data} onSaved={() => qc.invalidateQueries({ queryKey: ["workflows", "config"] })} />
         <FoldersSection cfg={cfgQ.data} workspace={workspace} onSaved={() => qc.invalidateQueries({ queryKey: ["config", "workspaces"] })} />
+        <SourceSection workspace={workspace} canPick={canPick} />
+        <PreviewSection />
         <UiSection onJump={() => void navigate({ to: "/review" })} />
       </div>
     </div>
@@ -578,6 +582,230 @@ function FoldersSection({
           </ul>
         </div>
       )}
+    </Section>
+  )
+}
+
+/**
+ * 预览与播放：悬停预演的两个开关。
+ *
+ * 存 localStorage（和「界面」同一条键 gb.ui.v1），改完**立即落盘**——不放保存钮，
+ * 因为这两个开关的效果就在鼠标下面，点一下就能当场验证，再让用户去点保存是多余的。
+ *
+ * 🔴 静音默认开：悬停就出声是最容易把人吓一跳的默认值，出声必须显式打开。
+ */
+/**
+ * 采集源：各平台落盘的文件夹（每个工作区一份）。
+ *
+ * 收编 = **复制**一份进 `草稿/`，不就地索引、不动原文件。为什么不就地读：
+ * 导出 / 删除 / 预览 / rel_path / 前缀比较全都假设「文件在工作区内」，
+ * 改成绝对路径是几十处静默风险（见 `backend/intake.py` 的注释）。
+ *
+ * 添加走系统对话框（`/api/system/pick-folder`，`timeoutMs: 0` 不能加超时），
+ * 也允许直接粘贴路径 —— 网络盘 / 映射盘靠浏览点不进去时还有一条路。
+ * 保存后端会校验：相对路径、不存在的目录一律 400，直接弹出来，不做静默清洗。
+ */
+function SourceSection({ workspace, canPick }: { workspace: string | null; canPick: boolean }) {
+  const qc = useQueryClient()
+  const key = ["watch-dirs", workspace]
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      api.get<{ name: string; watch_dirs: string[] }>(
+        `/api/workspaces/${encodeURIComponent(workspace!)}/watch-dirs`
+      ),
+    enabled: !!workspace,
+  })
+
+  /* draft = null 表示「跟着服务器走」；一旦编辑就脱离，保存成功后重新归位 */
+  const [draft, setDraft] = useState<string[] | null>(null)
+  const [manual, setManual] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [picking, setPicking] = useState(false)
+
+  const saved = q.data?.watch_dirs ?? []
+  const list = draft ?? saved
+  const dirty = !!draft && (draft.length !== saved.length || draft.some((d, i) => d !== saved[i]))
+
+  function add(p: string) {
+    const v = p.trim()
+    if (!v) return
+    if (list.some((x) => x.toLowerCase() === v.toLowerCase())) {
+      toast.error("这个目录已经在列表里")
+      return
+    }
+    setDraft([...list, v])
+    setManual("")
+  }
+
+  async function pick() {
+    setPicking(true)
+    try {
+      const r = await api.post<{ path: string | null; cancelled: boolean }>(
+        "/api/system/pick-folder",
+        { title: "选择采集源文件夹", initial: "" },
+        // 🔴 原生对话框要等用户操作，多慢都可能 —— 绝不能给它套默认超时
+        { timeoutMs: 0 }
+      )
+      if (r.path) add(r.path)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  async function save() {
+    setBusy(true)
+    try {
+      await api.patch(`/api/workspaces/${encodeURIComponent(workspace!)}/watch-dirs`, {
+        dirs: list,
+      })
+      setDraft(null)
+      qc.invalidateQueries({ queryKey: key })
+      qc.invalidateQueries({ queryKey: ["inbox", "watch-dirs"] })
+      toast.success("采集源已保存", {
+        description: list.length
+          ? `${list.length} 个目录；下一轮刷新会把新文件收编进 草稿/`
+          : "已清空，只收工作区自己的草稿目录",
+      })
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Section
+      title="采集源"
+      desc="各平台（即梦 / 可灵 / 剪映 …）落盘的文件夹。有新文件就复制一份进 草稿/，原文件不动、不删。"
+      aside={dirty ? <SaveBtn busy={busy} onClick={save} /> : undefined}
+    >
+      {!workspace ? (
+        <p className="text-[11.5px] text-ash-dim">先在上面选一个工作区，采集源是按工作区存的。</p>
+      ) : q.isPending ? (
+        <p className="text-[11.5px] text-ash-dim">读取采集源…</p>
+      ) : (
+        <>
+          {list.length === 0 ? (
+            <p className="text-[11.5px] text-ash-dim">
+              还没配。加一个平台输出目录，它下回出现新片子就会自己出现在资产页的「收件箱」里。
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {list.map((p) => (
+                <li
+                  key={p}
+                  className="flex items-center gap-2 rounded-ctl border border-rule-soft bg-cell px-2.5 py-1.5"
+                >
+                  <span
+                    className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ash"
+                    title={p}
+                  >
+                    {p}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDraft(list.filter((x) => x !== p))}
+                    className="flex-none rounded-ctl px-1.5 py-0.5 text-[11px] text-ash-dim transition-colors hover:bg-hi hover:text-paper"
+                  >
+                    移除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              className={INPUT}
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  add(manual)
+                }
+              }}
+              placeholder="粘贴绝对路径，或点右边选目录"
+              spellCheck={false}
+              aria-label="采集源目录"
+            />
+            <button
+              type="button"
+              onClick={() => add(manual)}
+              disabled={!manual.trim()}
+              className={OUTLINE_BTN + " disabled:opacity-45"}
+            >
+              添加
+            </button>
+            <button
+              type="button"
+              onClick={pick}
+              disabled={!canPick || picking}
+              title={canPick ? "弹出系统对话框选目录" : "这台机器不支持系统目录对话框"}
+              className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-ctl border border-rule bg-cell text-ash transition-colors hover:bg-hi hover:text-paper disabled:opacity-45"
+            >
+              <FolderOpen className={cn("size-3.5", picking && "animate-pulse")} />
+            </button>
+          </div>
+
+          <p className="text-[11px] leading-relaxed text-ash-dim">
+            收编只改能证实的名字：认得出段号的按模板改名，认不出的保留原名并标「未认领」——
+            那种片子在收件箱里点「通过」会提示补段号，不会瞎猜一个塞给你。
+            监听目录不能在当前工作区内部（否则 草稿/ 里的片子会自我增殖），后端会直接拒。
+          </p>
+        </>
+      )}
+    </Section>
+  )
+}
+
+function PreviewSection() {
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs())
+
+  function patch(p: Partial<Prefs["preview"]>) {
+    const next: Prefs = { ...prefs, preview: { ...prefs.preview, ...p } }
+    setPrefs(next)
+    writeJSON(PREFS_KEY, next)
+  }
+
+  return (
+    <Section title="预览与播放" desc="在资产格里悬停就生效，只影响这个浏览器（键 gb.ui.v1）。">
+      <div className="flex items-center gap-3">
+        <Switch
+          checked={prefs.preview.hover}
+          onCheckedChange={(v) => patch({ hover: v })}
+          aria-label="悬停预演"
+        />
+        <span className="text-[12.5px] text-ash">悬停预演</span>
+        <span className="flex-1" />
+        <span className="font-mono text-[10.5px] text-ash-dim">
+          {prefs.preview.hover ? "停留 120ms 触发" : "已关闭"}
+        </span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-ash-dim">
+        图片悬停放大、视频悬停试播。停留 120ms 才开始，横扫过去不会一路闪；屏幕上同一时刻只有一块预览。
+        按住 <span className="font-mono">Alt</span> 看 1:1 像素，用来判断清晰度。音频格不受这项影响，它有自己的悬停试听。
+      </p>
+
+      <div className="flex items-center gap-3">
+        <Switch
+          checked={prefs.preview.muted}
+          disabled={!prefs.preview.hover}
+          onCheckedChange={(v) => patch({ muted: v })}
+          aria-label="试播静音"
+        />
+        <span className={cn("text-[12.5px]", prefs.preview.hover ? "text-ash" : "text-ash-dim")}>
+          试播静音
+        </span>
+        <span className="flex-1" />
+        <span className="font-mono text-[10.5px] text-ash-dim">{prefs.preview.muted ? "开" : "关"}</span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-ash-dim">
+        默认开。关掉之后，视频一悬停就出声——只在核对台词时才建议关。
+      </p>
     </Section>
   )
 }

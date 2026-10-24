@@ -90,6 +90,21 @@ export const DEFAULT_READER: ReaderPrefs = {
   contentWidth: 0,
 }
 
+/**
+ * 悬停预演（资产页的图片放大 / 视频试播）。
+ *
+ * 🔴 `muted` 默认 **true**：悬停就出声是最容易把人吓一跳的默认值 ——
+ * 用户原话是「失败放上去就自动播放声音了」，所以出声必须显式打开。
+ */
+export interface PreviewPrefs {
+  /** 关掉后悬停既不放大也不试播（触屏、或嫌碍事的人用） */
+  hover: boolean
+  /** 视频试播是否静音。默认静音，关掉才出声 */
+  muted: boolean
+}
+
+export const DEFAULT_PREVIEW: PreviewPrefs = { hover: true, muted: true }
+
 export const DEFAULT_PREFS: Prefs = {
   version: 1,
   view: "board",
@@ -98,6 +113,8 @@ export const DEFAULT_PREFS: Prefs = {
   reader: { ...DEFAULT_READER },
   runParams: { ...DEFAULT_RUN_PARAMS, byWorkflow: {} },
   recent: { ...DEFAULT_RECENT, segs: [] },
+  preview: { ...DEFAULT_PREVIEW },
+  railOpen: false,
 }
 
 /** v1 的页面偏好字段；P0 路由化后不再用于决定页面，保留只为旧值兼容。 */
@@ -114,6 +131,10 @@ export interface Prefs {
   runParams: RunParams
   /** 最近打开过的段（P3）。历史记录，不受 keepOnReload 管 */
   recent: RecentPrefs
+  /** 悬停预演（资产页放大 / 试播），默认开且静音 */
+  preview: PreviewPrefs
+  /** 侧栏展开状态。默认收起（只留图标），给内容让宽度 */
+  railOpen: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +214,14 @@ export function loadPrefs(): Prefs {
   }
   // 最近打开：只留字符串、去重、限长
   merged.recent = { segs: sanitizeRecent(merged.recent?.segs) }
+  // 悬停预演：只认布尔（localStorage 可能被手改过）
+  const pv = merged.preview
+  merged.preview = {
+    hover: typeof pv?.hover === "boolean" ? pv.hover : DEFAULT_PREVIEW.hover,
+    muted: typeof pv?.muted === "boolean" ? pv.muted : DEFAULT_PREVIEW.muted,
+  }
+  // 侧栏展开状态：同上，脏值一律回落到「收起」
+  merged.railOpen = typeof merged.railOpen === "boolean" ? merged.railOpen : false
   return merged
 }
 
